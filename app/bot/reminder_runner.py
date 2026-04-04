@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from aiogram import Bot
 
 from app.bot.reminder_dispatcher import dispatch_due_reminders
+from app.bot.summary_dispatcher import dispatch_due_summaries
 from app.services.reminder_service import ReminderService
 
 
@@ -17,7 +18,7 @@ async def run_inline_reminder_loop(
     *,
     poll_interval_seconds: int = 5,
 ) -> None:
-    logger.info("Starting inline reminder loop")
+    logger.info("Starting inline reminder and summary loop")
     last_checked_minute = None
 
     while not stop_event.is_set():
@@ -25,15 +26,24 @@ async def run_inline_reminder_loop(
 
         if current_utc_minute != last_checked_minute:
             try:
-                result = await dispatch_due_reminders(bot, current_utc_minute)
-                if result["checked"] or result["sent"]:
+                reminder_result = await dispatch_due_reminders(bot, current_utc_minute)
+                summary_result = await dispatch_due_summaries(bot, current_utc_minute)
+
+                if reminder_result["checked"] or reminder_result["sent"]:
                     logger.info(
                         "Inline reminder dispatch completed: checked=%s sent=%s",
-                        result["checked"],
-                        result["sent"],
+                        reminder_result["checked"],
+                        reminder_result["sent"],
+                    )
+                if summary_result["checked"] or summary_result["daily_sent"] or summary_result["weekly_sent"]:
+                    logger.info(
+                        "Inline summary dispatch completed: checked=%s daily_sent=%s weekly_sent=%s",
+                        summary_result["checked"],
+                        summary_result["daily_sent"],
+                        summary_result["weekly_sent"],
                     )
             except Exception:
-                logger.exception("Inline reminder dispatch failed")
+                logger.exception("Inline reminder or summary dispatch failed")
             finally:
                 last_checked_minute = current_utc_minute
 
@@ -42,4 +52,4 @@ async def run_inline_reminder_loop(
         except asyncio.TimeoutError:
             continue
 
-    logger.info("Inline reminder loop stopped")
+    logger.info("Inline reminder and summary loop stopped")

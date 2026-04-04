@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Numeric, String, text
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, CreatedAtMixin, IdMixin, UpdatedAtMixin
@@ -46,6 +46,14 @@ class User(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
         nullable=True,
     )
     utc_offset_minutes: Mapped[int | None] = mapped_column(
+        nullable=True,
+    )
+    last_daily_summary_sent_for_date: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+    )
+    last_weekly_summary_sent_for_week_start: Mapped[date | None] = mapped_column(
+        Date,
         nullable=True,
     )
 

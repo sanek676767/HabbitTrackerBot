@@ -1,7 +1,7 @@
 from aiogram import F, Router
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
-from app.bot.callbacks import HabitListSource
+from app.bot.callbacks import HabitListSource, OpenTodayCallback
 from app.bot.keyboards import TODAY_BUTTON, get_habits_list_keyboard
 from app.services.habit_service import HabitService
 from app.services.user_service import UserService
@@ -25,14 +25,41 @@ async def show_today_habits(
         await message.answer("Сначала отправьте /start.")
         return
 
-    habits = await habit_service.get_today_habits(user.id)
-    if not habits:
-        await message.answer("У тебя пока нет активных привычек на сегодня.")
+    text, reply_markup = await _build_today_screen_text(user.id, habit_service)
+    await message.answer(text, reply_markup=reply_markup)
+
+
+@router.callback_query(OpenTodayCallback.filter())
+async def open_today_from_callback(
+    callback: CallbackQuery,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    if callback.from_user is None or callback.message is None:
+        await callback.answer()
         return
 
-    await message.answer(
+    user = await user_service.get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала отправьте /start.", show_alert=True)
+        return
+
+    text, reply_markup = await _build_today_screen_text(user.id, habit_service)
+    await callback.message.edit_text(text, reply_markup=reply_markup)
+    await callback.answer()
+
+
+async def _build_today_screen_text(
+    user_id: int,
+    habit_service: HabitService,
+) -> tuple[str, InlineKeyboardMarkup | None]:
+    habits = await habit_service.get_today_habits(user_id)
+    if not habits:
+        return ("У тебя пока нет активных привычек на сегодня.", None)
+
+    return (
         "Сегодня:\nВыбери привычку, чтобы открыть карточку.",
-        reply_markup=get_habits_list_keyboard(
+        get_habits_list_keyboard(
             habits,
             HabitListSource.TODAY.value,
             show_completion_status=True,

@@ -21,6 +21,10 @@ celery_app.conf.update(
         "dispatch-habit-reminders-every-minute": {
             "task": "app.workers.tasks.dispatch_habit_reminders",
             "schedule": 60.0,
+        },
+        "dispatch-progress-summaries-every-minute": {
+            "task": "app.workers.tasks.dispatch_progress_summaries",
+            "schedule": 60.0,
         }
     },
 )

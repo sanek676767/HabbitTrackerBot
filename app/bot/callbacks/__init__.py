@@ -15,6 +15,7 @@ from app.bot.callbacks.habit import (
     HabitStatsCallback,
     HabitViewCallback,
 )
+from app.bot.callbacks.navigation import OpenProgressCallback, OpenTodayCallback
 
 __all__ = [
     "CreateHabitCallback",
@@ -32,4 +33,6 @@ __all__ = [
     "HabitRestoreCallback",
     "HabitDeleteCallback",
     "HabitListCallback",
+    "OpenTodayCallback",
+    "OpenProgressCallback",
 ]

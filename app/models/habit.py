@@ -42,6 +42,10 @@ class Habit(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    last_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     reminder_enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

@@ -12,10 +12,15 @@ from app.bot.keyboards.main_menu import (
     ALL_MAIN_MENU_BUTTONS,
     BACK_TO_MENU_BUTTON,
     MY_HABITS_BUTTON,
+    PROGRESS_BUTTON,
     PROFILE_BUTTON,
     TODAY_BUTTON,
     get_create_habit_keyboard,
     get_main_menu_keyboard,
+)
+from app.bot.keyboards.progress import (
+    get_progress_screen_keyboard,
+    get_summary_actions_keyboard,
 )
 
 __all__ = [
@@ -24,6 +29,7 @@ __all__ = [
     "BACK_TO_MENU_BUTTON",
     "MY_HABITS_BUTTON",
     "TODAY_BUTTON",
+    "PROGRESS_BUTTON",
     "PROFILE_BUTTON",
     "get_create_habit_keyboard",
     "get_main_menu_keyboard",
@@ -34,4 +40,6 @@ __all__ = [
     "get_habit_reminder_input_keyboard",
     "get_habit_reminder_notification_keyboard",
     "get_habit_stats_keyboard",
+    "get_progress_screen_keyboard",
+    "get_summary_actions_keyboard",
 ]

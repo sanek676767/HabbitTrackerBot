@@ -76,6 +76,11 @@ class HabitRepository:
         await self._session.flush()
         return habit
 
+    async def update_last_completed_at(self, habit: Habit, last_completed_at: datetime) -> Habit:
+        habit.last_completed_at = last_completed_at
+        await self._session.flush()
+        return habit
+
     async def update_reminder(
         self,
         habit: Habit,
@@ -100,6 +105,25 @@ class HabitRepository:
                 User.utc_offset_minutes.is_not(None),
             )
             .order_by(Habit.id.asc())
+        )
+        result = await self._session.scalars(statement)
+        return list(result)
+
+    async def get_last_completed_habits_by_user(
+        self,
+        user_id: int,
+        *,
+        limit: int = 1,
+    ) -> list[Habit]:
+        statement = (
+            select(Habit)
+            .where(
+                Habit.user_id == user_id,
+                Habit.is_deleted.is_(False),
+                Habit.last_completed_at.is_not(None),
+            )
+            .order_by(Habit.last_completed_at.desc(), Habit.id.desc())
+            .limit(limit)
         )
         result = await self._session.scalars(statement)
         return list(result)

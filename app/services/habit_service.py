@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -208,6 +208,10 @@ class HabitService:
 
         try:
             await self._habit_log_repository.create_log(habit.id, today)
+            await self._habit_repository.update_last_completed_at(
+                habit,
+                datetime.now(timezone.utc),
+            )
             await self._session.commit()
         except IntegrityError:
             await self._session.rollback()
