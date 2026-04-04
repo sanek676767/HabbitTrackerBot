@@ -34,6 +34,26 @@ class HabitEditCancelCallback(CallbackData, prefix="habit_edit_cancel"):
     source: str
 
 
+class HabitReminderMenuCallback(CallbackData, prefix="habit_reminder_menu"):
+    habit_id: int
+    source: str
+
+
+class HabitReminderSetTimeCallback(CallbackData, prefix="habit_reminder_set_time"):
+    habit_id: int
+    source: str
+
+
+class HabitReminderDisableCallback(CallbackData, prefix="habit_reminder_disable"):
+    habit_id: int
+    source: str
+
+
+class HabitReminderCancelCallback(CallbackData, prefix="habit_reminder_cancel"):
+    habit_id: int
+    source: str
+
+
 class HabitArchiveCallback(CallbackData, prefix="habit_archive"):
     habit_id: int
     source: str

@@ -10,6 +10,10 @@ from app.bot.callbacks import (
     HabitEditCancelCallback,
     HabitListCallback,
     HabitListSource,
+    HabitReminderCancelCallback,
+    HabitReminderDisableCallback,
+    HabitReminderMenuCallback,
+    HabitReminderSetTimeCallback,
     HabitRestoreCallback,
     HabitStatsCallback,
     HabitViewCallback,
@@ -92,19 +96,30 @@ def get_habit_card_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
+                text="⏰ Напоминание",
+                callback_data=HabitReminderMenuCallback(
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            ),
+            InlineKeyboardButton(
                 text="✏️ Редактировать",
                 callback_data=HabitEditCallback(
                     habit_id=habit_id,
                     source=source,
                 ).pack(),
             ),
+        ]
+    )
+    rows.append(
+        [
             InlineKeyboardButton(
                 text="📈 Статистика",
                 callback_data=HabitStatsCallback(
                     habit_id=habit_id,
                     source=source,
                 ).pack(),
-            ),
+            )
         ]
     )
     rows.append(
@@ -169,6 +184,88 @@ def get_habit_edit_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
                     callback_data=HabitEditCancelCallback(
                         habit_id=habit_id,
                         source=source,
+                    ).pack(),
+                )
+            ]
+        ]
+    )
+
+
+def get_habit_reminder_menu_keyboard(
+    habit_id: int,
+    source: str,
+    *,
+    can_set_time: bool,
+    can_disable: bool,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+
+    if can_set_time:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🕒 Изменить время" if can_disable else "🕒 Включить",
+                    callback_data=HabitReminderSetTimeCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ]
+        )
+
+    if can_disable:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🔕 Выключить",
+                    callback_data=HabitReminderDisableCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ]
+        )
+
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data=HabitViewCallback(
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            )
+        ]
+    )
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_habit_reminder_input_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Отмена",
+                    callback_data=HabitReminderCancelCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ]
+        ]
+    )
+
+
+def get_habit_reminder_notification_keyboard(habit_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Открыть привычку",
+                    callback_data=HabitViewCallback(
+                        habit_id=habit_id,
+                        source=HabitListSource.TODAY.value,
                     ).pack(),
                 )
             ]

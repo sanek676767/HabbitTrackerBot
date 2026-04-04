@@ -1,9 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.habit import Habit
+from app.models.user import User
 
 
 class HabitRepository:
@@ -73,6 +75,34 @@ class HabitRepository:
         habit.title = title
         await self._session.flush()
         return habit
+
+    async def update_reminder(
+        self,
+        habit: Habit,
+        enabled: bool,
+        reminder_time: time | None,
+    ) -> Habit:
+        habit.reminder_enabled = enabled
+        habit.reminder_time = reminder_time if enabled else None
+        await self._session.flush()
+        return habit
+
+    async def get_habits_for_reminder_check(self) -> list[Habit]:
+        statement = (
+            select(Habit)
+            .options(selectinload(Habit.user))
+            .join(Habit.user)
+            .where(
+                Habit.is_active.is_(True),
+                Habit.is_deleted.is_(False),
+                Habit.reminder_enabled.is_(True),
+                User.is_blocked.is_(False),
+                User.utc_offset_minutes.is_not(None),
+            )
+            .order_by(Habit.id.asc())
+        )
+        result = await self._session.scalars(statement)
+        return list(result)
 
     async def soft_delete_habit(self, habit: Habit) -> Habit:
         habit.is_active = False

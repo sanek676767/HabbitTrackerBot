@@ -17,4 +17,10 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     broker_connection_retry_on_startup=True,
+    beat_schedule={
+        "dispatch-habit-reminders-every-minute": {
+            "task": "app.workers.tasks.dispatch_habit_reminders",
+            "schedule": 60.0,
+        }
+    },
 )

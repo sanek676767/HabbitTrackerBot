@@ -29,3 +29,12 @@ class UserRepository:
         self._session.add(user)
         await self._session.flush()
         return user
+
+    async def get_by_id(self, user_id: int) -> User | None:
+        statement = select(User).where(User.id == user_id)
+        return await self._session.scalar(statement)
+
+    async def update_utc_offset_minutes(self, user: User, utc_offset_minutes: int) -> User:
+        user.utc_offset_minutes = utc_offset_minutes
+        await self._session.flush()
+        return user

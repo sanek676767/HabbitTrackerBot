@@ -368,6 +368,11 @@ async def _build_today_screen(
 def _build_habit_card_text(habit_card: HabitCard) -> str:
     today_status = "Выполнена" if habit_card.is_completed_today else "Не выполнена"
     active_status = "Активная" if habit_card.is_active else "В архиве"
+    reminder_status = (
+        habit_card.reminder_time.strftime("%H:%M")
+        if habit_card.reminder_enabled and habit_card.reminder_time is not None
+        else "Выключено"
+    )
     return "\n".join(
         [
             f"📌 {html.quote(habit_card.title)}",
@@ -376,6 +381,7 @@ def _build_habit_card_text(habit_card: HabitCard) -> str:
             f"Всего выполнений: {habit_card.total_completions}",
             f"Текущая серия: {habit_card.current_streak}",
             f"Лучшая серия: {habit_card.best_streak}",
+            f"Напоминание: {reminder_status}",
             f"Статус: {active_status}",
         ]
     )

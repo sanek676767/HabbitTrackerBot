@@ -45,6 +45,9 @@ class User(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    utc_offset_minutes: Mapped[int | None] = mapped_column(
+        nullable=True,
+    )
 
     current_plan = relationship(
         "Plan",

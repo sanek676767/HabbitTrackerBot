@@ -1,6 +1,21 @@
+import asyncio
+import logging
 from datetime import datetime, timezone
 
+from aiogram import Bot, html
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+
+from app.bot.keyboards import get_habit_reminder_notification_keyboard
+from app.core.config import settings
+from app.core.database import async_session_factory
+from app.repositories.habit_log_repository import HabitLogRepository
+from app.repositories.habit_repository import HabitRepository
+from app.services.reminder_service import ReminderService
 from app.workers.celery_app import celery_app
+
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="app.workers.tasks.debug_ping")
@@ -9,3 +24,51 @@ def debug_ping() -> dict[str, str]:
         "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@celery_app.task(name="app.workers.tasks.dispatch_habit_reminders")
+def dispatch_habit_reminders() -> dict[str, int]:
+    return asyncio.run(_dispatch_habit_reminders())
+
+
+async def _dispatch_habit_reminders() -> dict[str, int]:
+    current_utc_datetime = ReminderService.normalize_utc_datetime(datetime.now(timezone.utc))
+
+    async with async_session_factory() as session:
+        reminder_service = ReminderService(
+            habit_repository=HabitRepository(session),
+            habit_log_repository=HabitLogRepository(session),
+        )
+        due_reminders = await reminder_service.get_due_habit_reminders(current_utc_datetime)
+
+    if not due_reminders:
+        return {"checked": 0, "sent": 0}
+
+    bot = Bot(
+        token=settings.bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    sent_count = 0
+
+    try:
+        for reminder in due_reminders:
+            try:
+                await bot.send_message(
+                    chat_id=reminder.telegram_id,
+                    text=(
+                        "Напоминание: пора выполнить привычку "
+                        f"«{html.quote(reminder.habit_title)}»"
+                    ),
+                    reply_markup=get_habit_reminder_notification_keyboard(reminder.habit_id),
+                )
+                sent_count += 1
+            except Exception:
+                logger.exception(
+                    "Failed to send reminder for habit_id=%s telegram_id=%s",
+                    reminder.habit_id,
+                    reminder.telegram_id,
+                )
+    finally:
+        await bot.session.close()
+
+    return {"checked": len(due_reminders), "sent": sent_count}

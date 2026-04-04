@@ -1,6 +1,9 @@
 from app.bot.keyboards.habits import (
     get_habit_card_keyboard,
     get_habit_edit_keyboard,
+    get_habit_reminder_input_keyboard,
+    get_habit_reminder_menu_keyboard,
+    get_habit_reminder_notification_keyboard,
     get_habit_stats_keyboard,
     get_habits_list_keyboard,
 )
@@ -27,5 +30,8 @@ __all__ = [
     "get_habits_list_keyboard",
     "get_habit_card_keyboard",
     "get_habit_edit_keyboard",
+    "get_habit_reminder_menu_keyboard",
+    "get_habit_reminder_input_keyboard",
+    "get_habit_reminder_notification_keyboard",
     "get_habit_stats_keyboard",
 ]

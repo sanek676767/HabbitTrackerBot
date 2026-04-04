@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, time
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Time, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, CreatedAtMixin, IdMixin, UpdatedAtMixin
@@ -40,6 +40,16 @@ class Habit(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
     )
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
+        nullable=True,
+    )
+    reminder_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    reminder_time: Mapped[time | None] = mapped_column(
+        Time(),
         nullable=True,
     )
 

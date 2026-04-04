@@ -1,5 +1,6 @@
+import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from app.repositories.habit_repository import HabitRepository
 
 TITLE_MAX_LENGTH = 100
 LAST_7_DAYS_WINDOW = 7
+REMINDER_TIME_PATTERN = re.compile(r"^\d{2}:\d{2}$")
 
 
 class HabitServiceError(Exception):
@@ -18,6 +20,10 @@ class HabitServiceError(Exception):
 
 
 class HabitValidationError(HabitServiceError):
+    pass
+
+
+class HabitReminderValidationError(HabitServiceError):
     pass
 
 
@@ -45,6 +51,12 @@ class HabitListItem:
 
 
 @dataclass(slots=True)
+class HabitReminderState:
+    enabled: bool
+    reminder_time: time | None
+
+
+@dataclass(slots=True)
 class HabitCard:
     id: int
     title: str
@@ -53,6 +65,8 @@ class HabitCard:
     current_streak: int
     best_streak: int
     is_active: bool
+    reminder_enabled: bool
+    reminder_time: time | None
 
 
 @dataclass(slots=True)
@@ -107,6 +121,59 @@ class HabitService:
         await self._session.refresh(habit)
         return await self.get_habit_card(user_id, habit_id)
 
+    async def enable_reminder(
+        self,
+        user_id: int,
+        habit_id: int,
+        reminder_time: str,
+    ) -> HabitReminderState:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        self._ensure_reminder_can_be_enabled(habit)
+
+        parsed_time = self._parse_reminder_time(reminder_time)
+        await self._habit_repository.update_reminder(
+            habit,
+            enabled=True,
+            reminder_time=parsed_time,
+        )
+        await self._session.commit()
+        return HabitReminderState(enabled=True, reminder_time=parsed_time)
+
+    async def disable_reminder(self, user_id: int, habit_id: int) -> HabitReminderState:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        await self._habit_repository.update_reminder(
+            habit,
+            enabled=False,
+            reminder_time=None,
+        )
+        await self._session.commit()
+        return HabitReminderState(enabled=False, reminder_time=None)
+
+    async def update_reminder_time(
+        self,
+        user_id: int,
+        habit_id: int,
+        reminder_time: str,
+    ) -> HabitReminderState:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        self._ensure_reminder_can_be_enabled(habit)
+
+        parsed_time = self._parse_reminder_time(reminder_time)
+        await self._habit_repository.update_reminder(
+            habit,
+            enabled=True,
+            reminder_time=parsed_time,
+        )
+        await self._session.commit()
+        return HabitReminderState(enabled=True, reminder_time=parsed_time)
+
+    async def get_habit_reminder_state(self, user_id: int, habit_id: int) -> HabitReminderState:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        return HabitReminderState(
+            enabled=habit.reminder_enabled,
+            reminder_time=habit.reminder_time,
+        )
+
     async def get_active_habits(self, user_id: int) -> list[HabitListItem]:
         habits = await self._habit_repository.get_active_habits_by_user(user_id)
         return [HabitListItem(id=habit.id, title=habit.title) for habit in habits]
@@ -126,6 +193,8 @@ class HabitService:
             current_streak=progress.current_streak,
             best_streak=progress.best_streak,
             is_active=habit.is_active,
+            reminder_enabled=habit.reminder_enabled,
+            reminder_time=habit.reminder_time,
         )
 
     async def complete_habit_for_today(self, user_id: int, habit_id: int) -> HabitCard:
@@ -254,6 +323,21 @@ class HabitService:
         return normalized_title
 
     @staticmethod
+    def _parse_reminder_time(raw_time: str) -> time:
+        normalized_time = raw_time.strip()
+        if not REMINDER_TIME_PATTERN.fullmatch(normalized_time):
+            raise HabitReminderValidationError("Введите время в формате ЧЧ:ММ.")
+
+        hours, minutes = normalized_time.split(":")
+        hour = int(hours)
+        minute = int(minutes)
+
+        if hour > 23 or minute > 59:
+            raise HabitReminderValidationError("Введите корректное время в формате ЧЧ:ММ.")
+
+        return time(hour=hour, minute=minute)
+
+    @staticmethod
     def _calculate_current_streak(completion_dates: set[date], today: date) -> int:
         if today in completion_dates:
             anchor_date = today
@@ -296,6 +380,11 @@ class HabitService:
             f"{day.strftime('%d.%m')}: {'✅' if day in completion_dates else '⬜'}"
             for day in days
         )
+
+    @staticmethod
+    def _ensure_reminder_can_be_enabled(habit: Habit) -> None:
+        if not habit.is_active:
+            raise HabitArchivedError("Для архивной привычки нельзя включить напоминание.")
 
     @staticmethod
     def _get_today() -> date:
