@@ -31,7 +31,7 @@ async def start_handler(message: Message, user_service: UserService) -> None:
                 f"Привет, {greeting_name}.",
                 status_line,
                 f"Внутренний ID: {user.id}",
-                "Команда /profile и кнопка «Профиль» покажут данные профиля.",
+                "Используй кнопки меню, чтобы управлять привычками и открыть профиль.",
             ]
         ),
         reply_markup=get_main_menu_keyboard(),

@@ -36,6 +36,7 @@ async def main() -> None:
     )
     dispatcher = Dispatcher()
     dispatcher.message.middleware(DbSessionMiddleware())
+    dispatcher.callback_query.middleware(DbSessionMiddleware())
 
     for router in routers:
         dispatcher.include_router(router)

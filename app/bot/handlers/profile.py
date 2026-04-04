@@ -1,8 +1,9 @@
-from aiogram import Router, html
+from aiogram import F, Router, html
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from app.bot.keyboards import get_main_menu_keyboard
+from app.bot.keyboards import PROFILE_BUTTON, get_main_menu_keyboard
+from app.services.habit_service import HabitService
 from app.services.user_service import UserService
 
 
@@ -10,7 +11,12 @@ router = Router(name="profile")
 
 
 @router.message(Command("profile"))
-async def profile_handler(message: Message, user_service: UserService) -> None:
+@router.message(F.text == PROFILE_BUTTON)
+async def profile_handler(
+    message: Message,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
     if message.from_user is None:
         await message.answer("Не удалось определить пользователя Telegram.")
         return
@@ -21,17 +27,23 @@ async def profile_handler(message: Message, user_service: UserService) -> None:
         return
 
     username = f"@{user.username}" if user.username else "не указан"
-    created_at = user.created_at.strftime("%Y-%m-%d %H:%M:%S %Z").strip()
-    admin_status = "yes" if user.is_admin else "no"
+    created_at = user.created_at.strftime("%d.%m.%Y %H:%M UTC")
+    admin_status = "Да" if user.is_admin else "Нет"
+    active_habits_count = await habit_service.count_active_habits(user.id)
+    completed_today_count = await habit_service.count_completed_today(user.id)
 
     await message.answer(
         "\n".join(
             [
-                "Профиль:",
-                f"telegram_id: {user.telegram_id}",
-                f"username: {html.quote(username)}",
-                f"registered_at: {created_at}",
-                f"is_admin: {admin_status}",
+                "👤 Твой профиль",
+                "",
+                f"Telegram ID: {user.telegram_id}",
+                f"Username: {html.quote(username)}",
+                f"В боте с: {created_at}",
+                f"Админ: {admin_status}",
+                "",
+                f"Активных привычек: {active_habits_count}",
+                f"Выполнено сегодня: {completed_today_count}",
             ]
         ),
         reply_markup=get_main_menu_keyboard(),

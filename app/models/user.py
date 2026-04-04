@@ -66,6 +66,11 @@ class User(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    habits = relationship(
+        "Habit",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     usage_logs = relationship(
         "UsageLog",
         back_populates="user",
