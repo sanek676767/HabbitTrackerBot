@@ -1,0 +1,15 @@
+.env
+.venv/
+.venv310/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.idea/
+.vscode/
+*.pyc
+*.pyo
+*.pyd
+dist/
+build/
+*.log
