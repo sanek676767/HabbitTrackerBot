@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,7 @@ from app.repositories.habit_repository import HabitRepository
 
 
 TITLE_MAX_LENGTH = 100
+LAST_7_DAYS_WINDOW = 7
 
 
 class HabitServiceError(Exception):
@@ -25,6 +26,10 @@ class HabitNotFoundError(HabitServiceError):
 
 
 class HabitArchivedError(HabitServiceError):
+    pass
+
+
+class HabitDeletedError(HabitServiceError):
     pass
 
 
@@ -45,6 +50,8 @@ class HabitCard:
     title: str
     is_completed_today: bool
     total_completions: int
+    current_streak: int
+    best_streak: int
     is_active: bool
 
 
@@ -54,7 +61,19 @@ class HabitStats:
     title: str
     total_completions: int
     is_completed_today: bool
+    current_streak: int
+    best_streak: int
+    last_7_days_progress_text: str
     created_at: datetime
+
+
+@dataclass(slots=True)
+class HabitProgressSummary:
+    total_completions: int
+    is_completed_today: bool
+    current_streak: int
+    best_streak: int
+    last_7_days_progress_text: str
 
 
 class HabitService:
@@ -69,14 +88,7 @@ class HabitService:
         self._habit_log_repository = habit_log_repository
 
     async def create_habit(self, user_id: int, title: str) -> Habit:
-        normalized_title = title.strip()
-        if not normalized_title:
-            raise HabitValidationError("Название привычки не может быть пустым.")
-        if len(normalized_title) > TITLE_MAX_LENGTH:
-            raise HabitValidationError(
-                f"Название привычки должно быть не длиннее {TITLE_MAX_LENGTH} символов."
-            )
-
+        normalized_title = self._normalize_title(title)
         habit = await self._habit_repository.create_habit(
             user_id=user_id,
             title=normalized_title,
@@ -85,6 +97,15 @@ class HabitService:
         await self._session.commit()
         await self._session.refresh(habit)
         return habit
+
+    async def rename_habit(self, user_id: int, habit_id: int, title: str) -> HabitCard:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        normalized_title = self._normalize_title(title)
+
+        await self._habit_repository.update_title(habit, normalized_title)
+        await self._session.commit()
+        await self._session.refresh(habit)
+        return await self.get_habit_card(user_id, habit_id)
 
     async def get_active_habits(self, user_id: int) -> list[HabitListItem]:
         habits = await self._habit_repository.get_active_habits_by_user(user_id)
@@ -95,20 +116,20 @@ class HabitService:
         return [HabitListItem(id=habit.id, title=habit.title) for habit in habits]
 
     async def get_habit_card(self, user_id: int, habit_id: int) -> HabitCard:
-        habit = await self._get_user_habit(user_id, habit_id)
-        today = self._get_today()
-        is_completed_today = await self._habit_log_repository.is_completed_for_date(habit.id, today)
-        total_completions = await self._habit_log_repository.count_completions(habit.id)
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        progress = await self._build_progress_summary(habit.id)
         return HabitCard(
             id=habit.id,
             title=habit.title,
-            is_completed_today=is_completed_today,
-            total_completions=total_completions,
+            is_completed_today=progress.is_completed_today,
+            total_completions=progress.total_completions,
+            current_streak=progress.current_streak,
+            best_streak=progress.best_streak,
             is_active=habit.is_active,
         )
 
     async def complete_habit_for_today(self, user_id: int, habit_id: int) -> HabitCard:
-        habit = await self._get_user_habit(user_id, habit_id)
+        habit = await self._get_visible_user_habit(user_id, habit_id)
         if not habit.is_active:
             raise HabitArchivedError("Архивную привычку нельзя отметить.")
 
@@ -126,20 +147,21 @@ class HabitService:
         return await self.get_habit_card(user_id, habit_id)
 
     async def get_habit_stats(self, user_id: int, habit_id: int) -> HabitStats:
-        habit = await self._get_user_habit(user_id, habit_id)
-        today = self._get_today()
-        is_completed_today = await self._habit_log_repository.is_completed_for_date(habit.id, today)
-        total_completions = await self._habit_log_repository.count_completions(habit.id)
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        progress = await self._build_progress_summary(habit.id)
         return HabitStats(
             id=habit.id,
             title=habit.title,
-            total_completions=total_completions,
-            is_completed_today=is_completed_today,
+            total_completions=progress.total_completions,
+            is_completed_today=progress.is_completed_today,
+            current_streak=progress.current_streak,
+            best_streak=progress.best_streak,
+            last_7_days_progress_text=progress.last_7_days_progress_text,
             created_at=habit.created_at,
         )
 
     async def archive_habit(self, user_id: int, habit_id: int) -> bool:
-        habit = await self._get_user_habit(user_id, habit_id)
+        habit = await self._get_visible_user_habit(user_id, habit_id)
         if not habit.is_active:
             return False
 
@@ -148,11 +170,20 @@ class HabitService:
         return True
 
     async def restore_habit(self, user_id: int, habit_id: int) -> bool:
-        habit = await self._get_user_habit(user_id, habit_id)
+        habit = await self._get_visible_user_habit(user_id, habit_id)
         if habit.is_active:
             return False
 
         await self._habit_repository.restore_habit(habit)
+        await self._session.commit()
+        return True
+
+    async def soft_delete_habit(self, user_id: int, habit_id: int) -> bool:
+        habit = await self._get_user_habit(user_id, habit_id)
+        if habit.is_deleted:
+            raise HabitDeletedError("Привычка уже удалена.")
+
+        await self._habit_repository.soft_delete_habit(habit)
         await self._session.commit()
         return True
 
@@ -183,11 +214,88 @@ class HabitService:
             self._get_today(),
         )
 
+    async def _build_progress_summary(self, habit_id: int) -> HabitProgressSummary:
+        completion_dates = await self._habit_log_repository.get_completion_dates(habit_id)
+        completion_date_set = set(completion_dates)
+        today = self._get_today()
+
+        return HabitProgressSummary(
+            total_completions=len(completion_dates),
+            is_completed_today=today in completion_date_set,
+            current_streak=self._calculate_current_streak(completion_date_set, today),
+            best_streak=self._calculate_best_streak(completion_dates),
+            last_7_days_progress_text=self._build_last_7_days_progress_text(
+                completion_date_set,
+                today,
+            ),
+        )
+
+    async def _get_visible_user_habit(self, user_id: int, habit_id: int) -> Habit:
+        habit = await self._get_user_habit(user_id, habit_id)
+        if habit.is_deleted:
+            raise HabitDeletedError("Привычка удалена.")
+        return habit
+
     async def _get_user_habit(self, user_id: int, habit_id: int) -> Habit:
         habit = await self._habit_repository.get_habit_by_id_for_user(habit_id, user_id)
         if habit is None:
             raise HabitNotFoundError("Привычка не найдена.")
         return habit
+
+    @staticmethod
+    def _normalize_title(title: str) -> str:
+        normalized_title = title.strip()
+        if not normalized_title:
+            raise HabitValidationError("Название привычки не может быть пустым.")
+        if len(normalized_title) > TITLE_MAX_LENGTH:
+            raise HabitValidationError(
+                f"Название привычки должно быть не длиннее {TITLE_MAX_LENGTH} символов."
+            )
+        return normalized_title
+
+    @staticmethod
+    def _calculate_current_streak(completion_dates: set[date], today: date) -> int:
+        if today in completion_dates:
+            anchor_date = today
+        elif today - timedelta(days=1) in completion_dates:
+            anchor_date = today - timedelta(days=1)
+        else:
+            return 0
+
+        streak = 0
+        cursor = anchor_date
+        while cursor in completion_dates:
+            streak += 1
+            cursor -= timedelta(days=1)
+        return streak
+
+    @staticmethod
+    def _calculate_best_streak(completion_dates: list[date]) -> int:
+        if not completion_dates:
+            return 0
+
+        best_streak = 1
+        current_streak = 1
+
+        for previous_date, current_date in zip(completion_dates, completion_dates[1:]):
+            if current_date == previous_date + timedelta(days=1):
+                current_streak += 1
+            else:
+                best_streak = max(best_streak, current_streak)
+                current_streak = 1
+
+        return max(best_streak, current_streak)
+
+    @staticmethod
+    def _build_last_7_days_progress_text(completion_dates: set[date], today: date) -> str:
+        days = [
+            today - timedelta(days=offset)
+            for offset in reversed(range(LAST_7_DAYS_WINDOW))
+        ]
+        return "\n".join(
+            f"{day.strftime('%d.%m')}: {'✅' if day in completion_dates else '⬜'}"
+            for day in days
+        )
 
     @staticmethod
     def _get_today() -> date:

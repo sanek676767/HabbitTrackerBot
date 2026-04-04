@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +28,11 @@ class HabitRepository:
     async def get_active_habits_by_user(self, user_id: int) -> list[Habit]:
         statement = (
             select(Habit)
-            .where(Habit.user_id == user_id, Habit.is_active.is_(True))
+            .where(
+                Habit.user_id == user_id,
+                Habit.is_active.is_(True),
+                Habit.is_deleted.is_(False),
+            )
             .order_by(Habit.created_at.asc(), Habit.id.asc())
         )
         result = await self._session.scalars(statement)
@@ -35,7 +41,11 @@ class HabitRepository:
     async def get_archived_habits_by_user(self, user_id: int) -> list[Habit]:
         statement = (
             select(Habit)
-            .where(Habit.user_id == user_id, Habit.is_active.is_(False))
+            .where(
+                Habit.user_id == user_id,
+                Habit.is_active.is_(False),
+                Habit.is_deleted.is_(False),
+            )
             .order_by(Habit.updated_at.desc(), Habit.id.desc())
         )
         result = await self._session.scalars(statement)
@@ -59,10 +69,23 @@ class HabitRepository:
         await self._session.flush()
         return habit
 
+    async def update_title(self, habit: Habit, title: str) -> Habit:
+        habit.title = title
+        await self._session.flush()
+        return habit
+
+    async def soft_delete_habit(self, habit: Habit) -> Habit:
+        habit.is_active = False
+        habit.is_deleted = True
+        habit.deleted_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return habit
+
     async def count_active_habits(self, user_id: int) -> int:
         statement = select(func.count(Habit.id)).where(
             Habit.user_id == user_id,
             Habit.is_active.is_(True),
+            Habit.is_deleted.is_(False),
         )
         result = await self._session.scalar(statement)
         return int(result or 0)

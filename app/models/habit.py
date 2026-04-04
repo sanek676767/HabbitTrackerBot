@@ -1,6 +1,7 @@
+from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Boolean, ForeignKey, String, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, CreatedAtMixin, IdMixin, UpdatedAtMixin
@@ -30,6 +31,16 @@ class Habit(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
         nullable=False,
         default=True,
         server_default=text("true"),
+    )
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     user = relationship("User", back_populates="habits")

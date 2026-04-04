@@ -4,7 +4,10 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.callbacks import (
     HabitArchiveCallback,
+    HabitDeleteCallback,
     HabitDoneCallback,
+    HabitEditCallback,
+    HabitEditCancelCallback,
     HabitListCallback,
     HabitListSource,
     HabitRestoreCallback,
@@ -89,12 +92,23 @@ def get_habit_card_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
+                text="✏️ Редактировать",
+                callback_data=HabitEditCallback(
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            ),
+            InlineKeyboardButton(
                 text="📈 Статистика",
                 callback_data=HabitStatsCallback(
                     habit_id=habit_id,
                     source=source,
                 ).pack(),
             ),
+        ]
+    )
+    rows.append(
+        [
             InlineKeyboardButton(
                 text="⏸ Архивировать" if is_active else "♻️ Вернуть в активные",
                 callback_data=(
@@ -108,6 +122,13 @@ def get_habit_card_keyboard(
                         source=source,
                     ).pack()
                 ),
+            ),
+            InlineKeyboardButton(
+                text="🗑 Удалить",
+                callback_data=HabitDeleteCallback(
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
             ),
         ]
     )
@@ -130,6 +151,22 @@ def get_habit_stats_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup
                 InlineKeyboardButton(
                     text="⬅️ Назад к привычке",
                     callback_data=HabitViewCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ]
+        ]
+    )
+
+
+def get_habit_edit_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Отмена",
+                    callback_data=HabitEditCancelCallback(
                         habit_id=habit_id,
                         source=source,
                     ).pack(),

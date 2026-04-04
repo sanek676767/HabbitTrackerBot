@@ -61,3 +61,12 @@ class HabitLogRepository:
         )
         result = await self._session.scalars(statement)
         return list(result)
+
+    async def get_completion_dates(self, habit_id: int) -> list[date]:
+        statement = (
+            select(HabitLog.completed_for_date)
+            .where(HabitLog.habit_id == habit_id)
+            .order_by(HabitLog.completed_for_date.asc())
+        )
+        result = await self._session.scalars(statement)
+        return list(result)
