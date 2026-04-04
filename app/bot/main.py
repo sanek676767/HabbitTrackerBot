@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -8,6 +9,7 @@ from aiogram.types import BotCommand
 
 from app.bot.handlers import routers
 from app.bot.middlewares.db_session import DbSessionMiddleware
+from app.bot.reminder_runner import run_inline_reminder_loop
 from app.core.config import settings
 from app.core.database import check_database_connection, dispose_engine
 from app.core.logging import configure_logging
@@ -41,6 +43,14 @@ async def main() -> None:
     for router in routers:
         dispatcher.include_router(router)
 
+    reminder_stop_event = asyncio.Event()
+    reminder_task = None
+    if not settings.redis_enabled:
+        reminder_task = asyncio.create_task(
+            run_inline_reminder_loop(bot, reminder_stop_event)
+        )
+        logger.info("Inline reminder runtime enabled because REDIS_ENABLED=false")
+
     logger.info("Starting Telegram bot polling")
 
     try:
@@ -49,6 +59,10 @@ async def main() -> None:
             allowed_updates=dispatcher.resolve_used_update_types(),
         )
     finally:
+        if reminder_task is not None:
+            reminder_stop_event.set()
+            with suppress(asyncio.CancelledError):
+                await reminder_task
         await bot.session.close()
         if settings.redis_enabled:
             await close_redis()
