@@ -53,6 +53,18 @@ class HabitRepository:
         result = await self._session.scalars(statement)
         return list(result)
 
+    async def get_deleted_habits_by_user(self, user_id: int) -> list[Habit]:
+        statement = (
+            select(Habit)
+            .where(
+                Habit.user_id == user_id,
+                Habit.is_deleted.is_(True),
+            )
+            .order_by(Habit.deleted_at.desc(), Habit.id.desc())
+        )
+        result = await self._session.scalars(statement)
+        return list(result)
+
     async def get_habit_by_id(self, habit_id: int) -> Habit | None:
         statement = select(Habit).where(Habit.id == habit_id)
         return await self._session.scalar(statement)
@@ -68,6 +80,13 @@ class HabitRepository:
 
     async def restore_habit(self, habit: Habit) -> Habit:
         habit.is_active = True
+        await self._session.flush()
+        return habit
+
+    async def restore_soft_deleted_habit(self, habit: Habit) -> Habit:
+        habit.is_deleted = False
+        habit.deleted_at = None
+        habit.is_active = False
         await self._session.flush()
         return habit
 
@@ -141,5 +160,21 @@ class HabitRepository:
             Habit.is_active.is_(True),
             Habit.is_deleted.is_(False),
         )
+        result = await self._session.scalar(statement)
+        return int(result or 0)
+
+    async def count_archived_habits(self, user_id: int) -> int:
+        statement = select(func.count(Habit.id)).where(
+            Habit.user_id == user_id,
+            Habit.is_active.is_(False),
+            Habit.is_deleted.is_(False),
+        )
+        result = await self._session.scalar(statement)
+        return int(result or 0)
+
+    async def count_deleted_habits(self, user_id: int | None = None) -> int:
+        statement = select(func.count(Habit.id)).where(Habit.is_deleted.is_(True))
+        if user_id is not None:
+            statement = statement.where(Habit.user_id == user_id)
         result = await self._session.scalar(statement)
         return int(result or 0)

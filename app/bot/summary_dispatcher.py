@@ -46,9 +46,10 @@ async def dispatch_due_summaries(
             user_local_time = time(user_local_datetime.hour, user_local_datetime.minute)
             week_start = _get_week_start(user_local_date)
 
-            if (
-                user_local_time == DAILY_SUMMARY_TRIGGER_TIME
-                and user.last_daily_summary_sent_for_date != user_local_date
+            if _should_send_daily_summary(
+                user_local_time,
+                user_local_date,
+                user.last_daily_summary_sent_for_date,
             ):
                 daily_summary = await progress_service.get_daily_progress_summary(user.id)
                 if await _send_daily_summary(bot, user.telegram_id, daily_summary):
@@ -59,10 +60,10 @@ async def dispatch_due_summaries(
                     await session.commit()
                     daily_sent += 1
 
-            if (
-                user_local_time == WEEKLY_SUMMARY_TRIGGER_TIME
-                and user_local_date.weekday() == WEEKLY_SUMMARY_WEEKDAY
-                and user.last_weekly_summary_sent_for_week_start != week_start
+            if _should_send_weekly_summary(
+                user_local_time,
+                user_local_date,
+                user.last_weekly_summary_sent_for_week_start,
             ):
                 weekly_summary = await progress_service.get_weekly_progress_summary(user.id)
                 if await _send_weekly_summary(bot, user.telegram_id, weekly_summary):
@@ -178,6 +179,30 @@ def _get_user_local_datetime(
 
 def _get_week_start(target_date: date) -> date:
     return target_date - timedelta(days=target_date.weekday())
+
+
+def _should_send_daily_summary(
+    current_local_time: time,
+    current_local_date: date,
+    last_sent_for_date: date | None,
+) -> bool:
+    return (
+        current_local_time == DAILY_SUMMARY_TRIGGER_TIME
+        and last_sent_for_date != current_local_date
+    )
+
+
+def _should_send_weekly_summary(
+    current_local_time: time,
+    current_local_date: date,
+    last_sent_for_week_start: date | None,
+) -> bool:
+    week_start = _get_week_start(current_local_date)
+    return (
+        current_local_time == WEEKLY_SUMMARY_TRIGGER_TIME
+        and current_local_date.weekday() == WEEKLY_SUMMARY_WEEKDAY
+        and last_sent_for_week_start != week_start
+    )
 
 
 def _format_percentage(value: float) -> str:

@@ -82,6 +82,11 @@ class User(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    feedback_messages = relationship(
+        "FeedbackMessage",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     usage_logs = relationship(
         "UsageLog",
         back_populates="user",

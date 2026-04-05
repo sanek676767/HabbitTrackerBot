@@ -33,7 +33,10 @@ async def main() -> None:
     await bot.set_my_commands(
         [
             BotCommand(command="start", description="Запустить бота"),
+            BotCommand(command="admin", description="Admin panel"),
+            BotCommand(command="help", description="Показать помощь"),
             BotCommand(command="profile", description="Показать профиль"),
+            BotCommand(command="feedback", description="Отправить обратную связь"),
         ]
     )
     dispatcher = Dispatcher()

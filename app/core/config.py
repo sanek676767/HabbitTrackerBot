@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     bot_token: str
+    feedback_contact_username: str | None = None
 
     postgres_host: str = "postgres"
     postgres_port: int = 5432

@@ -1,4 +1,5 @@
 from app.models.base import Base
+from app.models.feedback_message import FeedbackMessage
 from app.models.habit import Habit
 from app.models.habit_log import HabitLog
 from app.models.payment import Payment
@@ -11,6 +12,7 @@ from app.models.user import User
 __all__ = [
     "Base",
     "User",
+    "FeedbackMessage",
     "Habit",
     "HabitLog",
     "Plan",
