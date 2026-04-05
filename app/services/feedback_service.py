@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from aiogram import html
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,9 @@ from app.core.config import settings
 from app.models.user import User
 from app.repositories.feedback_repository import FeedbackRepository
 from app.repositories.user_repository import UserRepository
+
+if TYPE_CHECKING:
+    from app.services.admin_action_log_service import AdminActionLogService
 
 
 FEEDBACK_PREVIEW_LENGTH = 32
@@ -95,10 +99,12 @@ class FeedbackService:
         session: AsyncSession,
         user_repository: UserRepository,
         feedback_repository: FeedbackRepository,
+        admin_action_log_service: "AdminActionLogService",
     ) -> None:
         self._session = session
         self._user_repository = user_repository
         self._feedback_repository = feedback_repository
+        self._admin_action_log_service = admin_action_log_service
 
     async def get_feedback_destination(self) -> FeedbackDestination:
         admin_users = await self._user_repository.get_admin_users()
@@ -220,7 +226,7 @@ class FeedbackService:
         feedback_id: int,
         reply_text: str,
     ) -> FeedbackCard:
-        await self._ensure_admin(actor_telegram_id)
+        actor = await self._ensure_admin(actor_telegram_id)
         feedback = await self._feedback_repository.get_feedback_by_id(feedback_id)
         if feedback is None or feedback.user is None:
             raise FeedbackNotFoundError("Сообщение не найдено.")
@@ -233,6 +239,13 @@ class FeedbackService:
             feedback,
             normalized_reply_text,
             datetime.now(timezone.utc),
+        )
+        await self._admin_action_log_service.log_feedback_reply(
+            actor_user_id=actor.id,
+            target_user_id=feedback.user.id,
+            feedback_id=feedback.id,
+            reply_text=normalized_reply_text,
+            feedback_preview=self._build_preview_text(feedback.message_text),
         )
         await self._session.commit()
         return self._build_feedback_card(feedback)

@@ -31,6 +31,11 @@ class AdminFeedbackActionCallback(CallbackData, prefix="admin_feedback_action"):
     page: int
 
 
+class AdminActionLogCallback(CallbackData, prefix="admin_action_log"):
+    log_id: int
+    page: int
+
+
 class AdminDeletedHabitActionCallback(CallbackData, prefix="admin_deleted_habit"):
     action: str
     user_id: int

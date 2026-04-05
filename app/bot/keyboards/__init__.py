@@ -7,6 +7,8 @@ from app.bot.keyboards.create_habit import (
     get_create_habit_weekdays_keyboard,
 )
 from app.bot.keyboards.admin import (
+    get_admin_action_log_card_keyboard,
+    get_admin_action_log_list_keyboard,
     get_admin_dashboard_keyboard,
     get_admin_feedback_card_keyboard,
     get_admin_feedback_list_keyboard,
@@ -62,6 +64,8 @@ __all__ = [
     "get_create_habit_reminder_keyboard",
     "get_create_habit_text_input_keyboard",
     "get_create_habit_weekdays_keyboard",
+    "get_admin_action_log_card_keyboard",
+    "get_admin_action_log_list_keyboard",
     "get_admin_dashboard_keyboard",
     "get_admin_feedback_card_keyboard",
     "get_admin_feedback_list_keyboard",

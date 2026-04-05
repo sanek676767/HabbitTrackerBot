@@ -1,3 +1,4 @@
+from app.models.admin_action_log import AdminActionLog
 from app.models.base import Base
 from app.models.feedback_message import FeedbackMessage
 from app.models.habit import Habit
@@ -11,6 +12,7 @@ from app.models.user import User
 
 __all__ = [
     "Base",
+    "AdminActionLog",
     "User",
     "FeedbackMessage",
     "Habit",

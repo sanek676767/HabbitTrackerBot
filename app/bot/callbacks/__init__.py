@@ -1,4 +1,5 @@
 from app.bot.callbacks.admin import (
+    AdminActionLogCallback,
     AdminDashboardCallback,
     AdminDeletedHabitActionCallback,
     AdminFeedbackCallback,
@@ -35,6 +36,7 @@ __all__ = [
     "AdminUserActionCallback",
     "AdminFeedbackCallback",
     "AdminFeedbackActionCallback",
+    "AdminActionLogCallback",
     "AdminDeletedHabitActionCallback",
     "CreateHabitCallback",
     "FeedbackCallback",

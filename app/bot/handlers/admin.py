@@ -6,6 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from app.bot.callbacks import (
+    AdminActionLogCallback,
     AdminDashboardCallback,
     AdminDeletedHabitActionCallback,
     AdminFeedbackActionCallback,
@@ -16,6 +17,8 @@ from app.bot.callbacks import (
 )
 from app.bot.keyboards import (
     ALL_MAIN_MENU_BUTTONS,
+    get_admin_action_log_card_keyboard,
+    get_admin_action_log_list_keyboard,
     get_admin_dashboard_keyboard,
     get_admin_feedback_card_keyboard,
     get_admin_feedback_list_keyboard,
@@ -26,6 +29,13 @@ from app.bot.keyboards import (
     get_admin_user_card_keyboard,
     get_admin_user_confirm_keyboard,
     get_admin_users_keyboard,
+)
+from app.services.admin_action_log_service import (
+    AdminActionLogAccessDeniedError,
+    AdminActionLogCard,
+    AdminActionLogNotFoundError,
+    AdminActionLogPage,
+    AdminActionLogService,
 )
 from app.services.admin_service import (
     AdminAccessDeniedError,
@@ -53,6 +63,7 @@ router = Router(name="admin")
 
 USERS_SECTION = "users"
 FEEDBACK_SECTION = "fb"
+ACTION_LOG_SECTION = "logs"
 GLOBAL_DELETED_SECTION = "gdel"
 USER_ACTIVE_SECTION = "uact"
 USER_ARCHIVED_SECTION = "uarc"
@@ -139,6 +150,7 @@ async def handle_admin_page_callback(
     callback_data: AdminPageCallback,
     state: FSMContext,
     admin_service: AdminService,
+    admin_action_log_service: AdminActionLogService,
     feedback_service: FeedbackService,
 ) -> None:
     if callback.from_user is None or callback.message is None:
@@ -154,6 +166,7 @@ async def handle_admin_page_callback(
             page=callback_data.page,
             user_id=callback_data.user_id,
             admin_service=admin_service,
+            admin_action_log_service=admin_action_log_service,
             feedback_service=feedback_service,
         )
     except AdminAccessDeniedError as error:
@@ -163,6 +176,9 @@ async def handle_admin_page_callback(
         await callback.answer(str(error), show_alert=True)
         return
     except FeedbackAccessDeniedError as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+    except AdminActionLogAccessDeniedError as error:
         await callback.answer(str(error), show_alert=True)
         return
     except AdminActionValidationError as error:
@@ -346,6 +362,7 @@ async def handle_admin_deleted_habit_action(
     callback_data: AdminDeletedHabitActionCallback,
     state: FSMContext,
     admin_service: AdminService,
+    admin_action_log_service: AdminActionLogService,
     feedback_service: FeedbackService,
 ) -> None:
     if callback.from_user is None or callback.message is None:
@@ -385,6 +402,7 @@ async def handle_admin_deleted_habit_action(
             page=callback_data.page,
             user_id=callback_data.user_id,
             admin_service=admin_service,
+            admin_action_log_service=admin_action_log_service,
             feedback_service=feedback_service,
         )
     except AdminAccessDeniedError as error:
@@ -395,6 +413,40 @@ async def handle_admin_deleted_habit_action(
         return
 
     await callback.answer(f"Привычка «{restored_habit.title}» восстановлена.")
+
+
+@router.callback_query(AdminActionLogCallback.filter())
+async def open_admin_action_log_card(
+    callback: CallbackQuery,
+    callback_data: AdminActionLogCallback,
+    state: FSMContext,
+    admin_action_log_service: AdminActionLogService,
+) -> None:
+    if callback.from_user is None or callback.message is None:
+        await callback.answer()
+        return
+
+    try:
+        log_card = await admin_action_log_service.get_log_card(
+            callback.from_user.id,
+            callback_data.log_id,
+        )
+    except AdminActionLogAccessDeniedError as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+    except AdminActionLogNotFoundError as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+
+    await state.clear()
+    await callback.message.edit_text(
+        _build_action_log_card_text(log_card),
+        reply_markup=get_admin_action_log_card_keyboard(
+            log_card,
+            page=callback_data.page,
+        ),
+    )
+    await callback.answer()
 
 
 @router.callback_query(AdminFeedbackCallback.filter())
@@ -571,6 +623,7 @@ async def _render_admin_page(
     page: int,
     user_id: int,
     admin_service: AdminService,
+    admin_action_log_service: AdminActionLogService,
     feedback_service: FeedbackService,
 ) -> None:
     if section == USERS_SECTION:
@@ -590,6 +643,17 @@ async def _render_admin_page(
         await message.edit_text(
             _build_feedback_list_text(feedback_page, unread_count),
             reply_markup=get_admin_feedback_list_keyboard(feedback_page),
+        )
+        return
+
+    if section == ACTION_LOG_SECTION:
+        log_page = await admin_action_log_service.get_logs_page(
+            actor_telegram_id,
+            page=page,
+        )
+        await message.edit_text(
+            _build_action_logs_list_text(log_page),
+            reply_markup=get_admin_action_log_list_keyboard(log_page),
         )
         return
 
@@ -768,6 +832,23 @@ def _build_feedback_list_text(
     )
 
 
+def _build_action_logs_list_text(log_page: AdminActionLogPage) -> str:
+    return "\n".join(
+        [
+            "📜 Журнал действий",
+            "",
+            f"Страница: {log_page.pagination.page}/{log_page.pagination.total_pages}",
+            f"Всего записей: {log_page.pagination.total_items}",
+            "",
+            (
+                "Выбери запись ниже."
+                if log_page.items
+                else "Журнал пока пуст."
+            ),
+        ]
+    )
+
+
 def _build_feedback_card_text(feedback_card: FeedbackCard) -> str:
     username = f"@{feedback_card.username}" if feedback_card.username else "не указан"
     full_name = feedback_card.full_name or "не указано"
@@ -801,6 +882,30 @@ def _build_feedback_card_text(feedback_card: FeedbackCard) -> str:
                 html.quote(feedback_card.admin_reply_text),
             ]
         )
+    return "\n".join(lines)
+
+
+def _build_action_log_card_text(log_card: AdminActionLogCard) -> str:
+    lines = [
+        "📜 Запись журнала",
+        "",
+        f"Номер записи: {log_card.id}",
+        f"Администратор: {html.quote(log_card.actor_display_name)}",
+        f"Действие: {log_card.action_text}",
+        f"Сущность: {html.quote(log_card.entity_text)}",
+        (
+            f"Целевой пользователь: {html.quote(log_card.target_display_name)}"
+            if log_card.target_display_name is not None
+            else "Целевой пользователь: не указан"
+        ),
+        f"Дата и время: {log_card.created_at.strftime('%d.%m.%Y %H:%M')}",
+    ]
+
+    if log_card.details:
+        lines.extend(["", "Подробности:"])
+        for detail in log_card.details:
+            lines.append(f"{detail.label}: {html.quote(detail.value)}")
+
     return "\n".join(lines)
 
 

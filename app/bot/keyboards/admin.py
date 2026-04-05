@@ -1,6 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.callbacks import (
+    AdminActionLogCallback,
     AdminDashboardCallback,
     AdminDeletedHabitActionCallback,
     AdminFeedbackActionCallback,
@@ -9,6 +10,7 @@ from app.bot.callbacks import (
     AdminUserActionCallback,
     AdminUserCallback,
 )
+from app.services.admin_action_log_service import AdminActionLogCard, AdminActionLogPage
 from app.services.admin_service import (
     AdminHabitListItem,
     AdminHabitListPage,
@@ -22,6 +24,7 @@ from app.services.feedback_service import FeedbackListItem, FeedbackListPage
 
 USERS_SECTION = "users"
 FEEDBACK_SECTION = "fb"
+ACTION_LOG_SECTION = "logs"
 GLOBAL_DELETED_SECTION = "gdel"
 USER_ACTIVE_SECTION = "uact"
 USER_ARCHIVED_SECTION = "uarc"
@@ -54,6 +57,14 @@ def get_admin_dashboard_keyboard(*, unread_feedback_count: int) -> InlineKeyboar
                     text=feedback_button_text,
                     callback_data=AdminPageCallback(
                         section=FEEDBACK_SECTION,
+                        page=1,
+                        user_id=0,
+                    ).pack(),
+                ),
+                InlineKeyboardButton(
+                    text="📜 Журнал действий",
+                    callback_data=AdminPageCallback(
+                        section=ACTION_LOG_SECTION,
                         page=1,
                         user_id=0,
                     ).pack(),
@@ -403,6 +414,79 @@ def get_admin_feedback_reply_keyboard(*, feedback_id: int, page: int) -> InlineK
                         page=page,
                     ).pack(),
                 )
+            ]
+        ]
+    )
+
+
+def get_admin_action_log_list_keyboard(log_page: AdminActionLogPage) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for item in log_page.items:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=item.summary_text,
+                    callback_data=AdminActionLogCallback(
+                        log_id=item.id,
+                        page=log_page.pagination.page,
+                    ).pack(),
+                )
+            ]
+        )
+
+    _append_pagination_row(
+        rows,
+        pagination=log_page.pagination,
+        prev_callback_data=(
+            AdminPageCallback(
+                section=ACTION_LOG_SECTION,
+                page=log_page.pagination.page - 1,
+                user_id=0,
+            ).pack()
+            if log_page.pagination.has_prev
+            else None
+        ),
+        next_callback_data=(
+            AdminPageCallback(
+                section=ACTION_LOG_SECTION,
+                page=log_page.pagination.page + 1,
+                user_id=0,
+            ).pack()
+            if log_page.pagination.has_next
+            else None
+        ),
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ К разделам",
+                callback_data=AdminDashboardCallback(action="home").pack(),
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_admin_action_log_card_keyboard(
+    log_card: AdminActionLogCard,
+    *,
+    page: int,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К журналу",
+                    callback_data=AdminPageCallback(
+                        section=ACTION_LOG_SECTION,
+                        page=page,
+                        user_id=0,
+                    ).pack(),
+                ),
+                InlineKeyboardButton(
+                    text="⬅️ К разделам",
+                    callback_data=AdminDashboardCallback(action="home").pack(),
+                ),
             ]
         ]
     )

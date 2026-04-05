@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, time
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,6 +8,9 @@ from app.models.user import User
 from app.repositories.feedback_repository import FeedbackRepository
 from app.repositories.habit_repository import HabitRepository
 from app.repositories.user_repository import UserRepository
+
+if TYPE_CHECKING:
+    from app.services.admin_action_log_service import AdminActionLogService
 
 
 USER_SEARCH_LIMIT = 20
@@ -113,11 +117,13 @@ class AdminService:
         user_repository: UserRepository,
         habit_repository: HabitRepository,
         feedback_repository: FeedbackRepository,
+        admin_action_log_service: "AdminActionLogService",
     ) -> None:
         self._session = session
         self._user_repository = user_repository
         self._habit_repository = habit_repository
         self._feedback_repository = feedback_repository
+        self._admin_action_log_service = admin_action_log_service
 
     async def get_dashboard(self, actor_telegram_id: int) -> AdminDashboardData:
         await self._get_admin_actor(actor_telegram_id)
@@ -185,6 +191,10 @@ class AdminService:
         self._ensure_can_change_block_state(actor, target_user)
 
         await self._user_repository.update_is_blocked(target_user, True)
+        await self._admin_action_log_service.log_block_user(
+            actor_user_id=actor.id,
+            target_user_id=target_user.id,
+        )
         await self._session.commit()
         return await self._build_user_card(target_user)
 
@@ -193,10 +203,14 @@ class AdminService:
         actor_telegram_id: int,
         target_user_id: int,
     ) -> AdminUserCard:
-        await self._get_admin_actor(actor_telegram_id)
+        actor = await self._get_admin_actor(actor_telegram_id)
         target_user = await self._get_target_user(target_user_id)
 
         await self._user_repository.update_is_blocked(target_user, False)
+        await self._admin_action_log_service.log_unblock_user(
+            actor_user_id=actor.id,
+            target_user_id=target_user.id,
+        )
         await self._session.commit()
         return await self._build_user_card(target_user)
 
@@ -205,10 +219,14 @@ class AdminService:
         actor_telegram_id: int,
         target_user_id: int,
     ) -> AdminUserCard:
-        await self._get_admin_actor(actor_telegram_id)
+        actor = await self._get_admin_actor(actor_telegram_id)
         target_user = await self._get_target_user(target_user_id)
 
         await self._user_repository.update_is_admin(target_user, True)
+        await self._admin_action_log_service.log_grant_admin(
+            actor_user_id=actor.id,
+            target_user_id=target_user.id,
+        )
         await self._session.commit()
         return await self._build_user_card(target_user)
 
@@ -222,6 +240,10 @@ class AdminService:
         self._ensure_can_revoke_admin(actor, target_user)
 
         await self._user_repository.update_is_admin(target_user, False)
+        await self._admin_action_log_service.log_revoke_admin(
+            actor_user_id=actor.id,
+            target_user_id=target_user.id,
+        )
         await self._session.commit()
         return await self._build_user_card(target_user)
 
@@ -342,12 +364,18 @@ class AdminService:
         actor_telegram_id: int,
         habit_id: int,
     ) -> AdminHabitListItem:
-        await self._get_admin_actor(actor_telegram_id)
+        actor = await self._get_admin_actor(actor_telegram_id)
         habit = await self._habit_repository.get_habit_by_id(habit_id)
         if habit is None or not habit.is_deleted or habit.user is None:
             raise AdminHabitNotFoundError("Удалённая привычка не найдена.")
 
         await self._habit_repository.restore_soft_deleted_habit(habit)
+        await self._admin_action_log_service.log_restore_deleted_habit(
+            actor_user_id=actor.id,
+            target_user_id=habit.user.id,
+            habit_id=habit.id,
+            habit_title=habit.title,
+        )
         await self._session.commit()
         return AdminHabitListItem(
             id=habit.id,
