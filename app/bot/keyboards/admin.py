@@ -5,12 +5,29 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from app.bot.callbacks import (
     AdminDashboardCallback,
     AdminDeletedHabitActionCallback,
+    AdminFeedbackActionCallback,
     AdminFeedbackCallback,
+    AdminPageCallback,
     AdminUserActionCallback,
     AdminUserCallback,
 )
-from app.services.admin_service import AdminUserListItem, DeletedHabitListItem
-from app.services.feedback_service import FeedbackListItem
+from app.services.admin_service import (
+    AdminHabitListItem,
+    AdminHabitListPage,
+    AdminPagination,
+    AdminUserCard,
+    AdminUserListItem,
+    AdminUsersPage,
+)
+from app.services.feedback_service import FeedbackListItem, FeedbackListPage
+
+
+USERS_SECTION = "users"
+FEEDBACK_SECTION = "fb"
+GLOBAL_DELETED_SECTION = "gdel"
+USER_ACTIVE_SECTION = "uact"
+USER_ARCHIVED_SECTION = "uarc"
+USER_DELETED_SECTION = "udel"
 
 
 def get_admin_dashboard_keyboard(*, unread_feedback_count: int) -> InlineKeyboardMarkup:
@@ -26,15 +43,23 @@ def get_admin_dashboard_keyboard(*, unread_feedback_count: int) -> InlineKeyboar
                     callback_data=AdminDashboardCallback(action="search").pack(),
                 ),
                 InlineKeyboardButton(
-                    text="👥 Все пользователи",
-                    callback_data=AdminDashboardCallback(action="list_users").pack(),
+                    text="👥 Пользователи",
+                    callback_data=AdminPageCallback(
+                        section=USERS_SECTION,
+                        page=1,
+                        user_id=0,
+                    ).pack(),
                 ),
             ],
             [
                 InlineKeyboardButton(
                     text=feedback_button_text,
-                    callback_data=AdminDashboardCallback(action="feedback").pack(),
-                )
+                    callback_data=AdminPageCallback(
+                        section=FEEDBACK_SECTION,
+                        page=1,
+                        user_id=0,
+                    ).pack(),
+                ),
             ],
         ]
     )
@@ -45,7 +70,7 @@ def get_admin_search_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard",
+                    text="⬅️ К разделам",
                     callback_data=AdminDashboardCallback(action="home").pack(),
                 )
             ]
@@ -53,9 +78,9 @@ def get_admin_search_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def get_admin_users_keyboard(users: Sequence[AdminUserListItem]) -> InlineKeyboardMarkup:
+def get_admin_users_keyboard(users_page: AdminUsersPage) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    for user in users:
+    for user in users_page.items:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -65,10 +90,32 @@ def get_admin_users_keyboard(users: Sequence[AdminUserListItem]) -> InlineKeyboa
             ]
         )
 
+    _append_pagination_row(
+        rows,
+        pagination=users_page.pagination,
+        prev_callback_data=(
+            AdminPageCallback(
+                section=USERS_SECTION,
+                page=users_page.pagination.page - 1,
+                user_id=0,
+            ).pack()
+            if users_page.pagination.has_prev
+            else None
+        ),
+        next_callback_data=(
+            AdminPageCallback(
+                section=USERS_SECTION,
+                page=users_page.pagination.page + 1,
+                user_id=0,
+            ).pack()
+            if users_page.pagination.has_next
+            else None
+        ),
+    )
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Dashboard",
+                text="⬅️ К разделам",
                 callback_data=AdminDashboardCallback(action="home").pack(),
             )
         ]
@@ -76,42 +123,56 @@ def get_admin_users_keyboard(users: Sequence[AdminUserListItem]) -> InlineKeyboa
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_admin_user_card_keyboard(
-    user_id: int,
-    *,
-    is_admin: bool,
-    is_blocked: bool,
-) -> InlineKeyboardMarkup:
+def get_admin_user_card_keyboard(user_card: AdminUserCard) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✅ Разблокировать" if is_blocked else "🚫 Заблокировать",
-                    callback_data=AdminUserActionCallback(
-                        action="unblock" if is_blocked else "block",
-                        user_id=user_id,
+                    text=f"🟢 Активные ({user_card.active_habits_count})",
+                    callback_data=AdminPageCallback(
+                        section=USER_ACTIVE_SECTION,
+                        page=1,
+                        user_id=user_card.id,
                     ).pack(),
                 ),
                 InlineKeyboardButton(
-                    text="↩️ Снять admin" if is_admin else "👑 Выдать admin",
-                    callback_data=AdminUserActionCallback(
-                        action="revoke_admin" if is_admin else "grant_admin",
-                        user_id=user_id,
+                    text=f"🗂 Архив ({user_card.archived_habits_count})",
+                    callback_data=AdminPageCallback(
+                        section=USER_ARCHIVED_SECTION,
+                        page=1,
+                        user_id=user_card.id,
                     ).pack(),
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="🗑 Soft-deleted habits",
-                    callback_data=AdminUserActionCallback(
-                        action="deleted_habits",
-                        user_id=user_id,
+                    text=f"🗑 Удалённые ({user_card.deleted_habits_count})",
+                    callback_data=AdminPageCallback(
+                        section=USER_DELETED_SECTION,
+                        page=1,
+                        user_id=user_card.id,
                     ).pack(),
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard",
+                    text="✅ Разблокировать" if user_card.is_blocked else "🚫 Заблокировать",
+                    callback_data=AdminUserActionCallback(
+                        action="unblock" if user_card.is_blocked else "ask_block",
+                        user_id=user_card.id,
+                    ).pack(),
+                ),
+                InlineKeyboardButton(
+                    text="↩️ Снять права" if user_card.is_admin else "👑 Выдать права",
+                    callback_data=AdminUserActionCallback(
+                        action="ask_revoke" if user_card.is_admin else "grant",
+                        user_id=user_card.id,
+                    ).pack(),
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К разделам",
                     callback_data=AdminDashboardCallback(action="home").pack(),
                 )
             ],
@@ -119,52 +180,175 @@ def get_admin_user_card_keyboard(
     )
 
 
-def get_admin_deleted_habits_keyboard(
-    user_id: int,
-    habits: Sequence[DeletedHabitListItem],
-) -> InlineKeyboardMarkup:
+def get_admin_user_confirm_keyboard(action: str, user_id: int) -> InlineKeyboardMarkup:
+    confirm_text = "Да, продолжить"
+    if action == "block":
+        confirm_text = "Да, заблокировать"
+    elif action == "revoke":
+        confirm_text = "Да, снять права"
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=confirm_text,
+                    callback_data=AdminUserActionCallback(
+                        action=action,
+                        user_id=user_id,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К карточке",
+                    callback_data=AdminUserCallback(user_id=user_id).pack(),
+                )
+            ],
+        ]
+    )
+
+
+def get_admin_habit_list_keyboard(habits_page: AdminHabitListPage) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    for habit in habits:
+    section = _get_section_for_habits_page(habits_page)
+
+    if habits_page.list_type in {"deleted", "global_deleted"}:
+        for habit in habits_page.items:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"♻️ {_truncate_text(habit.title, 28)}",
+                        callback_data=AdminDeletedHabitActionCallback(
+                            action="ask_restore",
+                            user_id=habit.owner_user_id,
+                            habit_id=habit.id,
+                            page=habits_page.pagination.page,
+                            scope=section,
+                        ).pack(),
+                    )
+                ]
+            )
+
+    _append_pagination_row(
+        rows,
+        pagination=habits_page.pagination,
+        prev_callback_data=(
+            AdminPageCallback(
+                section=section,
+                page=habits_page.pagination.page - 1,
+                user_id=habits_page.owner_user_id or 0,
+            ).pack()
+            if habits_page.pagination.has_prev
+            else None
+        ),
+        next_callback_data=(
+            AdminPageCallback(
+                section=section,
+                page=habits_page.pagination.page + 1,
+                user_id=habits_page.owner_user_id or 0,
+            ).pack()
+            if habits_page.pagination.has_next
+            else None
+        ),
+    )
+
+    if habits_page.list_type == "global_deleted":
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"♻️ {habit.title}",
-                    callback_data=AdminDeletedHabitActionCallback(
-                        action="restore",
-                        user_id=user_id,
-                        habit_id=habit.id,
-                    ).pack(),
+                    text="⬅️ К разделам",
+                    callback_data=AdminDashboardCallback(action="home").pack(),
+                )
+            ]
+        )
+    else:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К карточке",
+                    callback_data=AdminUserCallback(user_id=habits_page.owner_user_id or 0).pack(),
                 )
             ]
         )
 
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text="⬅️ К пользователю",
-                callback_data=AdminUserCallback(user_id=user_id).pack(),
-            )
-        ]
-    )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_admin_feedback_list_keyboard(feedback_items: Sequence[FeedbackListItem]) -> InlineKeyboardMarkup:
+def get_admin_restore_confirm_keyboard(
+    habit: AdminHabitListItem,
+    *,
+    page: int,
+    scope: str,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Да, восстановить",
+                    callback_data=AdminDeletedHabitActionCallback(
+                        action="restore",
+                        user_id=habit.owner_user_id,
+                        habit_id=habit.id,
+                        page=page,
+                        scope=scope,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data=AdminPageCallback(
+                        section=scope,
+                        page=page,
+                        user_id=habit.owner_user_id,
+                    ).pack(),
+                )
+            ],
+        ]
+    )
+
+
+def get_admin_feedback_list_keyboard(feedback_page: FeedbackListPage) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    for feedback in feedback_items:
+    for feedback in feedback_page.items:
         rows.append(
             [
                 InlineKeyboardButton(
                     text=_build_feedback_button_text(feedback),
-                    callback_data=AdminFeedbackCallback(feedback_id=feedback.id).pack(),
+                    callback_data=AdminFeedbackCallback(
+                        feedback_id=feedback.id,
+                        page=feedback_page.page,
+                    ).pack(),
                 )
             ]
         )
 
+    _append_pagination_row(
+        rows,
+        pagination=_to_admin_pagination(feedback_page),
+        prev_callback_data=(
+            AdminPageCallback(
+                section=FEEDBACK_SECTION,
+                page=feedback_page.page - 1,
+                user_id=0,
+            ).pack()
+            if feedback_page.has_prev
+            else None
+        ),
+        next_callback_data=(
+            AdminPageCallback(
+                section=FEEDBACK_SECTION,
+                page=feedback_page.page + 1,
+                user_id=0,
+            ).pack()
+            if feedback_page.has_next
+            else None
+        ),
+    )
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Dashboard",
+                text="⬅️ К разделам",
                 callback_data=AdminDashboardCallback(action="home").pack(),
             )
         ]
@@ -172,18 +356,55 @@ def get_admin_feedback_list_keyboard(feedback_items: Sequence[FeedbackListItem])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_admin_feedback_card_keyboard() -> InlineKeyboardMarkup:
+def get_admin_feedback_card_keyboard(
+    *,
+    feedback_id: int,
+    page: int,
+    has_reply: bool,
+) -> InlineKeyboardMarkup:
+    reply_button_text = "✉️ Ответить ещё раз" if has_reply else "✉️ Ответить"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ К feedback",
-                    callback_data=AdminDashboardCallback(action="feedback").pack(),
+                    text=reply_button_text,
+                    callback_data=AdminFeedbackActionCallback(
+                        action="reply",
+                        feedback_id=feedback_id,
+                        page=page,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К сообщениям",
+                    callback_data=AdminPageCallback(
+                        section=FEEDBACK_SECTION,
+                        page=page,
+                        user_id=0,
+                    ).pack(),
                 ),
                 InlineKeyboardButton(
-                    text="⬅️ Dashboard",
+                    text="⬅️ К разделам",
                     callback_data=AdminDashboardCallback(action="home").pack(),
                 ),
+            ],
+        ]
+    )
+
+
+def get_admin_feedback_reply_keyboard(*, feedback_id: int, page: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Отмена",
+                    callback_data=AdminFeedbackActionCallback(
+                        action="cancel",
+                        feedback_id=feedback_id,
+                        page=page,
+                    ).pack(),
+                )
             ]
         ]
     )
@@ -200,8 +421,9 @@ def _build_user_button_text(user: AdminUserListItem) -> str:
     if user.is_blocked:
         status_parts.append("🚫")
 
-    status_suffix = f" {' '.join(status_parts)}" if status_parts else ""
-    return f"{title}{status_suffix}"
+    if status_parts:
+        return f"{title} {' '.join(status_parts)}"
+    return title
 
 
 def _build_feedback_button_text(feedback: FeedbackListItem) -> str:
@@ -209,6 +431,72 @@ def _build_feedback_button_text(feedback: FeedbackListItem) -> str:
     if feedback.username and not feedback.username.startswith("@"):
         author = f"@{feedback.username}"
 
-    unread_prefix = "🆕 " if not feedback.is_read else ""
+    if not feedback.is_read:
+        prefix = "🆕"
+    elif feedback.has_reply:
+        prefix = "✉️"
+    else:
+        prefix = "💬"
+
     created_at = feedback.created_at.strftime("%d.%m %H:%M")
-    return f"{unread_prefix}{author} • {created_at} • {feedback.preview_text}"
+    return f"{prefix} {author} • {created_at} • {feedback.preview_text}"
+
+
+def _append_pagination_row(
+    rows: list[list[InlineKeyboardButton]],
+    *,
+    pagination: AdminPagination,
+    prev_callback_data: str | None,
+    next_callback_data: str | None,
+) -> None:
+    if not pagination.has_prev and not pagination.has_next:
+        return
+
+    row: list[InlineKeyboardButton] = []
+    if prev_callback_data is not None:
+        row.append(
+            InlineKeyboardButton(
+                text="⬅️",
+                callback_data=prev_callback_data,
+            )
+        )
+    row.append(
+        InlineKeyboardButton(
+            text=f"{pagination.page}/{pagination.total_pages}",
+            callback_data=AdminDashboardCallback(action="noop").pack(),
+        )
+    )
+    if next_callback_data is not None:
+        row.append(
+            InlineKeyboardButton(
+                text="➡️",
+                callback_data=next_callback_data,
+            )
+        )
+    rows.append(row)
+
+
+def _to_admin_pagination(feedback_page: FeedbackListPage) -> AdminPagination:
+    return AdminPagination(
+        page=feedback_page.page,
+        total_items=feedback_page.total_items,
+        total_pages=feedback_page.total_pages,
+        has_prev=feedback_page.has_prev,
+        has_next=feedback_page.has_next,
+    )
+
+
+def _get_section_for_habits_page(habits_page: AdminHabitListPage) -> str:
+    if habits_page.list_type == "active":
+        return USER_ACTIVE_SECTION
+    if habits_page.list_type == "archived":
+        return USER_ARCHIVED_SECTION
+    if habits_page.list_type == "deleted":
+        return USER_DELETED_SECTION
+    return GLOBAL_DELETED_SECTION
+
+
+def _truncate_text(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+    return f"{value[: max_length - 1]}…"

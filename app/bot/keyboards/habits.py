@@ -5,6 +5,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from app.bot.callbacks import (
     HabitArchiveCallback,
     HabitDeleteCallback,
+    HabitDeleteConfirmCallback,
     HabitDoneCallback,
     HabitEditCallback,
     HabitEditCancelCallback,
@@ -62,7 +63,7 @@ def get_habits_list_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="⬅️ Активные привычки",
+                    text="⬅️ Активные",
                     callback_data=HabitListCallback(source=HabitListSource.LIST.value).pack(),
                 )
             ]
@@ -84,7 +85,7 @@ def get_habit_card_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="✅ Отметить сегодня",
+                    text="✅ Отметить на сегодня",
                     callback_data=HabitDoneCallback(
                         habit_id=habit_id,
                         source=source,
@@ -103,7 +104,7 @@ def get_habit_card_keyboard(
                 ).pack(),
             ),
             InlineKeyboardButton(
-                text="✏️ Редактировать",
+                text="✏️ Изменить",
                 callback_data=HabitEditCallback(
                     habit_id=habit_id,
                     source=source,
@@ -114,7 +115,7 @@ def get_habit_card_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="📈 Статистика",
+                text="📊 Статистика",
                 callback_data=HabitStatsCallback(
                     habit_id=habit_id,
                     source=source,
@@ -125,7 +126,7 @@ def get_habit_card_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="⏸ Архивировать" if is_active else "♻️ Вернуть в активные",
+                text="🗂 В архив" if is_active else "♻️ Вернуть в активные",
                 callback_data=(
                     HabitArchiveCallback(
                         habit_id=habit_id,
@@ -159,12 +160,37 @@ def get_habit_card_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def get_habit_delete_confirm_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Да, удалить",
+                    callback_data=HabitDeleteConfirmCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К привычке",
+                    callback_data=HabitViewCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+        ]
+    )
+
+
 def get_habit_stats_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Назад к привычке",
+                    text="⬅️ К привычке",
                     callback_data=HabitViewCallback(
                         habit_id=habit_id,
                         source=source,
@@ -204,7 +230,7 @@ def get_habit_reminder_menu_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="🕒 Изменить время" if can_disable else "🕒 Включить",
+                    text="🕒 Изменить время" if can_disable else "🔔 Включить напоминание",
                     callback_data=HabitReminderSetTimeCallback(
                         habit_id=habit_id,
                         source=source,
@@ -229,7 +255,7 @@ def get_habit_reminder_menu_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ Назад",
+                text="⬅️ К привычке",
                 callback_data=HabitViewCallback(
                     habit_id=habit_id,
                     source=source,

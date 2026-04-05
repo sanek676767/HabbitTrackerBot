@@ -62,13 +62,13 @@ async def open_reminder_menu(
         await callback.answer(str(error), show_alert=True)
         return
 
-    utc_offset_text = (
+    local_time_status = (
         UserService.format_utc_offset(user.utc_offset_minutes)
         if user.utc_offset_minutes is not None
         else None
     )
     await callback.message.edit_text(
-        _build_reminder_menu_text(habit_card, reminder_state, utc_offset_text),
+        _build_reminder_menu_text(habit_card, reminder_state, local_time_status),
         reply_markup=get_habit_reminder_menu_keyboard(
             habit_id=habit_card.id,
             source=callback_data.source,
@@ -107,10 +107,7 @@ async def start_reminder_setup(
         return
 
     if not habit_card.is_active:
-        await callback.answer(
-            "Для архивной привычки нельзя включить или изменить напоминание.",
-            show_alert=True,
-        )
+        await callback.answer("Для архивной привычки напоминание недоступно.", show_alert=True)
         return
 
     await state.update_data(
@@ -187,7 +184,7 @@ async def cancel_reminder_setup(
             is_active=habit_card.is_active,
         ),
     )
-    await callback.answer("Настройка напоминания отменена.")
+    await callback.answer("Настройку напоминания отменил.")
 
 
 @router.callback_query(HabitReminderDisableCallback.filter())
@@ -236,7 +233,7 @@ async def save_current_local_time(
     habit_service: HabitService,
 ) -> None:
     if message.from_user is None:
-        await message.answer("Не удалось определить пользователя Telegram.")
+        await message.answer("Не удалось определить пользователя.")
         return
 
     user = await user_service.get_by_telegram_id(message.from_user.id)
@@ -246,7 +243,7 @@ async def save_current_local_time(
         return
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
-        await message.answer("Сначала пришлите текущее локальное время или нажмите «⬅️ Отмена».")
+        await message.answer("Сначала пришли текущее местное время или нажми «⬅️ Отмена».")
         return
 
     state_data = await state.get_data()
@@ -262,11 +259,11 @@ async def save_current_local_time(
         or not isinstance(prompt_message_id, int)
     ):
         await state.clear()
-        await message.answer("Сессия настройки напоминания потеряна. Открой привычку заново.")
+        await message.answer("Не получилось продолжить настройку. Открой привычку ещё раз.")
         return
 
     try:
-        utc_offset_minutes = await user_service.set_utc_offset_from_local_time(
+        await user_service.set_utc_offset_from_local_time(
             user.id,
             message.text or "",
         )
@@ -286,7 +283,7 @@ async def save_current_local_time(
 
     if not habit_card.is_active:
         await state.clear()
-        await message.answer("Для архивной привычки нельзя включить или изменить напоминание.")
+        await message.answer("Для архивной привычки напоминание недоступно.")
         return
 
     await state.set_state(HabitReminderStates.waiting_for_time)
@@ -302,10 +299,7 @@ async def save_current_local_time(
         prompt_message_id=new_prompt_message_id,
     )
 
-    await message.answer(
-        "Сохранил смещение относительно UTC: "
-        f"{UserService.format_utc_offset(utc_offset_minutes)}."
-    )
+    await message.answer("Запомнил местное время. Теперь укажи, когда напоминать.")
 
 
 @router.message(HabitReminderStates.waiting_for_time)
@@ -316,7 +310,7 @@ async def save_reminder_time(
     habit_service: HabitService,
 ) -> None:
     if message.from_user is None:
-        await message.answer("Не удалось определить пользователя Telegram.")
+        await message.answer("Не удалось определить пользователя.")
         return
 
     user = await user_service.get_by_telegram_id(message.from_user.id)
@@ -326,7 +320,7 @@ async def save_reminder_time(
         return
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
-        await message.answer("Сначала введи время напоминания или нажми «⬅️ Отмена».")
+        await message.answer("Сначала пришли время напоминания или нажми «⬅️ Отмена».")
         return
 
     state_data = await state.get_data()
@@ -344,7 +338,7 @@ async def save_reminder_time(
         or not isinstance(prompt_message_id, int)
     ):
         await state.clear()
-        await message.answer("Сессия настройки напоминания потеряна. Открой привычку заново.")
+        await message.answer("Не получилось продолжить настройку. Открой привычку ещё раз.")
         return
 
     try:
@@ -354,20 +348,14 @@ async def save_reminder_time(
                 habit_id,
                 message.text or "",
             )
-            success_text = (
-                "Время напоминания обновлено: "
-                f"{reminder_state.reminder_time.strftime('%H:%M')}."
-            )
+            success_text = f"Теперь напомню в {reminder_state.reminder_time.strftime('%H:%M')}."
         else:
             reminder_state = await habit_service.enable_reminder(
                 user.id,
                 habit_id,
                 message.text or "",
             )
-            success_text = (
-                "Напоминание включено на "
-                f"{reminder_state.reminder_time.strftime('%H:%M')}."
-            )
+            success_text = f"Буду напоминать в {reminder_state.reminder_time.strftime('%H:%M')}."
         habit_card = await habit_service.get_habit_card(user.id, habit_id)
     except HabitReminderValidationError as error:
         await message.answer(str(error))
@@ -404,7 +392,7 @@ async def save_reminder_time(
 def _build_reminder_menu_text(
     habit_card: HabitCard,
     reminder_state: HabitReminderState,
-    utc_offset_text: str | None,
+    local_time_status: str | None,
 ) -> str:
     reminder_time = (
         reminder_state.reminder_time.strftime("%H:%M")
@@ -413,14 +401,14 @@ def _build_reminder_menu_text(
     )
 
     lines = [
-        f"⏰ Напоминание для привычки «{html.quote(habit_card.title)}»",
+        f"⏰ Напоминание для «{html.quote(habit_card.title)}»",
         "",
-        f"Статус: {'включено' if reminder_state.enabled else 'выключено'}",
+        f"Сейчас: {'включено' if reminder_state.enabled else 'выключено'}",
         f"Время: {reminder_time}",
         (
-            f"Смещение от UTC: {utc_offset_text}"
-            if utc_offset_text is not None
-            else "Смещение от UTC: ещё не настроено"
+            f"Местное время настроено: {local_time_status}"
+            if local_time_status is not None
+            else "Местное время ещё не настроено."
         ),
     ]
 
@@ -428,7 +416,21 @@ def _build_reminder_menu_text(
         lines.extend(
             [
                 "",
-                "Для архивной привычки нельзя включить или изменить время напоминания.",
+                "Для архивной привычки напоминание недоступно.",
+            ]
+        )
+    elif reminder_state.enabled:
+        lines.extend(
+            [
+                "",
+                "Можно изменить время или выключить напоминание.",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "",
+                "Нажми кнопку ниже, и я помогу включить напоминание.",
             ]
         )
 
@@ -438,10 +440,9 @@ def _build_reminder_menu_text(
 def _build_current_local_time_prompt_text(habit_card: HabitCard) -> str:
     return "\n".join(
         [
-            f"⏰ Напоминание для привычки «{html.quote(habit_card.title)}»",
+            f"⏰ Напоминание для «{html.quote(habit_card.title)}»",
             "",
-            "Чтобы напоминания приходили вовремя, напиши, сколько у тебя сейчас времени "
-            "в формате ЧЧ:ММ.",
+            "Сначала напиши, сколько у тебя сейчас времени, в формате ЧЧ:ММ.",
             "Например: 21:35",
         ]
     )
@@ -452,9 +453,9 @@ def _build_reminder_time_prompt_text(
     reminder_state: HabitReminderState,
 ) -> str:
     lines = [
-        f"⏰ Напоминание для привычки «{html.quote(habit_card.title)}»",
+        f"⏰ Напоминание для «{html.quote(habit_card.title)}»",
         "",
-        "Теперь введи время напоминания в формате ЧЧ:ММ.",
+        "Теперь напиши время напоминания в формате ЧЧ:ММ.",
         "Например: 09:30",
     ]
 
@@ -462,7 +463,7 @@ def _build_reminder_time_prompt_text(
         lines.extend(
             [
                 "",
-                f"Текущее время: {reminder_state.reminder_time.strftime('%H:%M')}",
+                f"Сейчас стоит: {reminder_state.reminder_time.strftime('%H:%M')}",
             ]
         )
 
@@ -470,21 +471,21 @@ def _build_reminder_time_prompt_text(
 
 
 def _build_habit_card_text(habit_card: HabitCard) -> str:
-    today_status = "Выполнена" if habit_card.is_completed_today else "Не выполнена"
-    active_status = "Активная" if habit_card.is_active else "В архиве"
+    today_status = "выполнена" if habit_card.is_completed_today else "ещё не выполнена"
+    active_status = "активна" if habit_card.is_active else "в архиве"
     reminder_status = (
         habit_card.reminder_time.strftime("%H:%M")
         if habit_card.reminder_enabled and habit_card.reminder_time is not None
-        else "Выключено"
+        else "выключено"
     )
     return "\n".join(
         [
             f"📌 {html.quote(habit_card.title)}",
             "",
             f"Сегодня: {today_status}",
-            f"Всего выполнений: {habit_card.total_completions}",
             f"Текущая серия: {habit_card.current_streak}",
             f"Лучшая серия: {habit_card.best_streak}",
+            f"Всего отметок: {habit_card.total_completions}",
             f"Напоминание: {reminder_status}",
             f"Статус: {active_status}",
         ]

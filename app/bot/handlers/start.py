@@ -24,7 +24,7 @@ async def start_handler(message: Message, user_service: UserService) -> None:
 
     greeting_name = html.quote(message.from_user.first_name or "друг")
     if is_created:
-        text = _build_onboarding_text(greeting_name, user.id)
+        text = _build_onboarding_text(greeting_name)
     else:
         text = _build_returning_user_text(greeting_name)
 
@@ -34,26 +34,25 @@ async def start_handler(message: Message, user_service: UserService) -> None:
     )
 
 
-def _build_onboarding_text(greeting_name: str, user_id: int) -> str:
+def _build_onboarding_text(greeting_name: str) -> str:
     return "\n".join(
         [
             f"Привет, {greeting_name}!",
             "",
             "Это бот для ежедневных привычек и спокойного ритма без лишнего шума.",
-            f"Твой внутренний ID: {user_id}",
             "",
-            "Что умеет бот:",
-            "• создавать привычки и отмечать выполнение каждый день",
-            "• напоминать в нужное время",
-            "• считать streak, прогресс и weekly summary",
-            "• хранить архив привычек, если ты хочешь убрать их из активных",
+            "Здесь можно:",
+            "• добавлять привычки и отмечать их каждый день",
+            "• включать напоминания на удобное время",
+            "• смотреть серии, прогресс и сводки",
+            "• убирать привычки в архив, если они пока не нужны",
             "",
             "С чего начать:",
             "1. Нажми «➕ Добавить привычку»",
             "2. Открой «🔥 Сегодня», чтобы отмечать выполнение",
             "3. Загляни в «📈 Прогресс», чтобы увидеть общую картину",
             "",
-            "Если захочешь быстро разобраться по функциям, открой «❓ Помощь».",
+            "Если захочешь быстро освоиться, открой «❓ Помощь».",
         ]
     )
 
@@ -63,7 +62,7 @@ def _build_returning_user_text(greeting_name: str) -> str:
         [
             f"С возвращением, {greeting_name}.",
             "",
-            "Главные кнопки уже на месте:",
+            "Главные разделы уже на месте:",
             "• «🔥 Сегодня» — отметить привычки за день",
             "• «📈 Прогресс» — посмотреть общую картину",
             "• «❓ Помощь» — быстро вспомнить, как всё устроено",

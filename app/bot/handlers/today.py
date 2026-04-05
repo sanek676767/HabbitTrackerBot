@@ -58,7 +58,7 @@ async def _build_today_screen_text(
         return ("У тебя пока нет активных привычек на сегодня.", None)
 
     return (
-        "Сегодня:\nВыбери привычку, чтобы открыть карточку.",
+        "🔥 Сегодня\nВыбери привычку, чтобы открыть карточку.",
         get_habits_list_keyboard(
             habits,
             HabitListSource.TODAY.value,

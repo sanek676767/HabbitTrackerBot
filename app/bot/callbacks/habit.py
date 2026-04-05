@@ -69,5 +69,10 @@ class HabitDeleteCallback(CallbackData, prefix="habit_delete"):
     source: str
 
 
+class HabitDeleteConfirmCallback(CallbackData, prefix="habit_delete_confirm"):
+    habit_id: int
+    source: str
+
+
 class HabitListCallback(CallbackData, prefix="habit_list"):
     source: str

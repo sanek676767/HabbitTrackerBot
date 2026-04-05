@@ -200,7 +200,7 @@ class HabitService:
     async def complete_habit_for_today(self, user_id: int, habit_id: int) -> HabitCard:
         habit = await self._get_visible_user_habit(user_id, habit_id)
         if not habit.is_active:
-            raise HabitArchivedError("Архивную привычку нельзя отметить.")
+            raise HabitArchivedError("Архивную привычку нельзя отметить на сегодня.")
 
         today = self._get_today()
         if await self._habit_log_repository.is_completed_for_date(habit.id, today):
@@ -254,7 +254,7 @@ class HabitService:
     async def soft_delete_habit(self, user_id: int, habit_id: int) -> bool:
         habit = await self._get_user_habit(user_id, habit_id)
         if habit.is_deleted:
-            raise HabitDeletedError("Привычка уже удалена.")
+            raise HabitDeletedError("Эта привычка уже удалена.")
 
         await self._habit_repository.soft_delete_habit(habit)
         await self._session.commit()
@@ -306,7 +306,7 @@ class HabitService:
     async def _get_visible_user_habit(self, user_id: int, habit_id: int) -> Habit:
         habit = await self._get_user_habit(user_id, habit_id)
         if habit.is_deleted:
-            raise HabitDeletedError("Привычка удалена.")
+            raise HabitDeletedError("Эта привычка уже удалена.")
         return habit
 
     async def _get_user_habit(self, user_id: int, habit_id: int) -> Habit:
@@ -319,10 +319,10 @@ class HabitService:
     def _normalize_title(title: str) -> str:
         normalized_title = title.strip()
         if not normalized_title:
-            raise HabitValidationError("Название привычки не может быть пустым.")
+            raise HabitValidationError("Название не должно быть пустым.")
         if len(normalized_title) > TITLE_MAX_LENGTH:
             raise HabitValidationError(
-                f"Название привычки должно быть не длиннее {TITLE_MAX_LENGTH} символов."
+                f"Название должно быть не длиннее {TITLE_MAX_LENGTH} символов."
             )
         return normalized_title
 
@@ -330,14 +330,14 @@ class HabitService:
     def _parse_reminder_time(raw_time: str) -> time:
         normalized_time = raw_time.strip()
         if not REMINDER_TIME_PATTERN.fullmatch(normalized_time):
-            raise HabitReminderValidationError("Введите время в формате ЧЧ:ММ.")
+            raise HabitReminderValidationError("Введи время в формате ЧЧ:ММ.")
 
         hours, minutes = normalized_time.split(":")
         hour = int(hours)
         minute = int(minutes)
 
         if hour > 23 or minute > 59:
-            raise HabitReminderValidationError("Введите корректное время в формате ЧЧ:ММ.")
+            raise HabitReminderValidationError("Похоже, время указано неверно. Используй формат ЧЧ:ММ.")
 
         return time(hour=hour, minute=minute)
 
@@ -388,7 +388,7 @@ class HabitService:
     @staticmethod
     def _ensure_reminder_can_be_enabled(habit: Habit) -> None:
         if not habit.is_active:
-            raise HabitArchivedError("Для архивной привычки нельзя включить напоминание.")
+            raise HabitArchivedError("Для архивной привычки напоминание недоступно.")
 
     @staticmethod
     def _get_today() -> date:

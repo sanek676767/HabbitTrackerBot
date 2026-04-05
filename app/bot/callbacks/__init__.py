@@ -2,6 +2,8 @@ from app.bot.callbacks.admin import (
     AdminDashboardCallback,
     AdminDeletedHabitActionCallback,
     AdminFeedbackCallback,
+    AdminFeedbackActionCallback,
+    AdminPageCallback,
     AdminUserActionCallback,
     AdminUserCallback,
 )
@@ -10,6 +12,7 @@ from app.bot.callbacks.feedback import FeedbackCallback
 from app.bot.callbacks.habit import (
     HabitArchiveCallback,
     HabitDeleteCallback,
+    HabitDeleteConfirmCallback,
     HabitDoneCallback,
     HabitEditCallback,
     HabitEditCancelCallback,
@@ -27,9 +30,11 @@ from app.bot.callbacks.navigation import OpenProgressCallback, OpenTodayCallback
 
 __all__ = [
     "AdminDashboardCallback",
+    "AdminPageCallback",
     "AdminUserCallback",
     "AdminUserActionCallback",
     "AdminFeedbackCallback",
+    "AdminFeedbackActionCallback",
     "AdminDeletedHabitActionCallback",
     "CreateHabitCallback",
     "FeedbackCallback",
@@ -46,6 +51,7 @@ __all__ = [
     "HabitArchiveCallback",
     "HabitRestoreCallback",
     "HabitDeleteCallback",
+    "HabitDeleteConfirmCallback",
     "HabitListCallback",
     "OpenTodayCallback",
     "OpenProgressCallback",

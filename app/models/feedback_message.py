@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, ForeignKey, Text, text
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, CreatedAtMixin, IdMixin
@@ -18,6 +20,11 @@ class FeedbackMessage(IdMixin, CreatedAtMixin, Base):
         nullable=False,
         default=False,
         server_default=text("false"),
+    )
+    admin_reply_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_replied_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     user = relationship("User", back_populates="feedback_messages")

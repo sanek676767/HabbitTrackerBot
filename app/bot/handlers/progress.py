@@ -65,10 +65,10 @@ def _build_progress_screen_text(progress_data: ProgressScreenData) -> str:
     )
     last_completed_text = (
         f"{html.quote(progress_data.last_completed_habit_title)} - "
-        f"{progress_data.last_completed_at.strftime('%d.%m.%Y %H:%M UTC')}"
+        f"{progress_data.last_completed_at.strftime('%d.%m.%Y %H:%M')}"
         if progress_data.last_completed_habit_title is not None
         and progress_data.last_completed_at is not None
-        else "Пока нет выполненных привычек"
+        else "Пока нет выполнений"
     )
     return "\n".join(
         [
@@ -79,8 +79,8 @@ def _build_progress_screen_text(progress_data: ProgressScreenData) -> str:
             f"Осталось сегодня: {progress_data.remaining_today_count}",
             f"Процент выполнения за 7 дней: {_format_percentage(progress_data.completion_rate_7_days)}",
             f"Процент выполнения за 30 дней: {_format_percentage(progress_data.completion_rate_30_days)}",
-            f"Лучший текущий streak: {best_current_streak_text}",
-            f"Последняя активность: {last_completed_text}",
+            f"Лучшая текущая серия: {best_current_streak_text}",
+            f"Последнее выполнение: {last_completed_text}",
         ]
     )
 

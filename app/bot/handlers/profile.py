@@ -23,12 +23,11 @@ async def profile_handler(
 
     user = await user_service.get_by_telegram_id(message.from_user.id)
     if user is None:
-        await message.answer("Пользователь не найден. Сначала отправьте /start.")
+        await message.answer("Сначала отправьте /start.")
         return
 
     username = f"@{user.username}" if user.username else "не указан"
-    created_at = user.created_at.strftime("%d.%m.%Y %H:%M UTC")
-    admin_status = "Да" if user.is_admin else "Нет"
+    created_at = user.created_at.strftime("%d.%m.%Y %H:%M")
     active_habits_count = await habit_service.count_active_habits(user.id)
     completed_today_count = await habit_service.count_completed_today(user.id)
 
@@ -37,13 +36,11 @@ async def profile_handler(
             [
                 "👤 Твой профиль",
                 "",
-                f"Telegram ID: {user.telegram_id}",
                 f"Username: {html.quote(username)}",
                 f"В боте с: {created_at}",
-                f"Админ: {admin_status}",
                 "",
                 f"Активных привычек: {active_habits_count}",
-                f"Выполнено сегодня: {completed_today_count}",
+                f"Отмечено сегодня: {completed_today_count}",
             ]
         ),
         reply_markup=get_main_menu_keyboard(),

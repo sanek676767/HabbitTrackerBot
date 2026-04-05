@@ -47,8 +47,8 @@ async def start_feedback(
                 [
                     "💬 Обратная связь",
                     "",
-                    "Напиши одним сообщением, что улучшить, что сломалось или чего не хватает.",
-                    "Сообщение сохранится в admin panel и уйдёт администратору.",
+                    "Напиши одним сообщением, что хочется улучшить или что работает неудобно.",
+                    "Я передам это команде бота.",
                 ]
             ),
             reply_markup=get_feedback_keyboard(),
@@ -56,9 +56,9 @@ async def start_feedback(
         return
 
     contact_line = (
-        f"Пока прямой inbox не настроен. Напиши сюда: {destination.support_contact_username}"
+        f"Связаться можно здесь: {destination.support_contact_username}"
         if destination.has_contact
-        else "Канал обратной связи пока не настроен. Попробуй позже."
+        else "Раздел обратной связи пока недоступен. Попробуй позже."
     )
     await message.answer(
         "\n".join(
@@ -84,7 +84,7 @@ async def cancel_feedback(
     if callback.message is not None:
         await callback.message.edit_text("Отправку обратной связи отменили.")
         await callback.message.answer(
-            "Возвращаю в главное меню.",
+            "Можно выбрать другое действие в меню.",
             reply_markup=get_main_menu_keyboard(),
         )
     await callback.answer()
@@ -103,7 +103,7 @@ async def submit_feedback(
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
         await message.answer(
-            "Сначала отправь сообщение или нажми «⬅️ Отмена» под сообщением.",
+            "Сначала отправь сообщение или нажми «⬅️ Отмена».",
             reply_markup=get_feedback_keyboard(),
         )
         return
@@ -124,12 +124,12 @@ async def submit_feedback(
         contact_line = (
             f"Сейчас можно написать сюда: {destination.support_contact_username}"
             if destination.has_contact
-            else "Канал обратной связи пока не настроен."
+            else "Раздел обратной связи пока недоступен."
         )
         await message.answer(
             "\n".join(
                 [
-                    "Не нашёл получателя для пересылки сообщения.",
+                    "Сейчас не получилось передать сообщение.",
                     contact_line,
                 ]
             ),
@@ -164,9 +164,9 @@ async def submit_feedback(
 
     await state.clear()
     confirmation_text = (
-        "Спасибо. Сообщение сохранено и передано администратору."
+        "Спасибо. Сообщение передано."
         if sent_count
-        else "Сообщение сохранено, но уведомление администратору не ушло."
+        else "Сообщение сохранено. Команда увидит его в разделе обратной связи."
     )
     await message.answer(
         confirmation_text,

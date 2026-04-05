@@ -127,7 +127,7 @@ async def save_habit_title(
         return
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
-        await message.answer("Чтобы отменить редактирование, нажми «⬅️ Отмена» под сообщением.")
+        await message.answer("Отправь новое название или нажми «⬅️ Отмена».")
         return
 
     state_data = await state.get_data()
@@ -138,7 +138,7 @@ async def save_habit_title(
 
     if not isinstance(habit_id, int) or not isinstance(source, str):
         await state.clear()
-        await message.answer("Сессия редактирования потеряна. Открой карточку привычки заново.")
+        await message.answer("Не получилось продолжить редактирование. Открой привычку ещё раз.")
         return
 
     try:
@@ -188,8 +188,8 @@ def _build_edit_prompt_text(title: str) -> str:
         [
             "✏️ Редактирование привычки",
             "",
-            f"Текущее название: {html.quote(title)}",
-            "Введите новое название:",
+            f"Сейчас: {html.quote(title)}",
+            "Напиши новое название.",
         ]
     )
 
@@ -207,9 +207,9 @@ def _build_habit_card_text(habit_card: HabitCard) -> str:
             f"📌 {html.quote(habit_card.title)}",
             "",
             f"Сегодня: {today_status}",
-            f"Всего выполнений: {habit_card.total_completions}",
             f"Текущая серия: {habit_card.current_streak}",
             f"Лучшая серия: {habit_card.best_streak}",
+            f"Всего отметок: {habit_card.total_completions}",
             f"Напоминание: {reminder_status}",
             f"Статус: {active_status}",
         ]

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -18,23 +20,35 @@ class FeedbackRepository:
         await self._session.flush()
         return feedback
 
-    async def list_feedback(self, *, limit: int = 20) -> list[FeedbackMessage]:
+    async def list_feedback(
+        self,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[FeedbackMessage]:
         statement = (
             select(FeedbackMessage)
             .options(selectinload(FeedbackMessage.user))
             .order_by(FeedbackMessage.created_at.desc(), FeedbackMessage.id.desc())
             .limit(limit)
+            .offset(offset)
         )
         result = await self._session.scalars(statement)
         return list(result)
 
-    async def list_unread_feedback(self, *, limit: int = 20) -> list[FeedbackMessage]:
+    async def list_unread_feedback(
+        self,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[FeedbackMessage]:
         statement = (
             select(FeedbackMessage)
             .options(selectinload(FeedbackMessage.user))
             .where(FeedbackMessage.is_read.is_(False))
             .order_by(FeedbackMessage.created_at.desc(), FeedbackMessage.id.desc())
             .limit(limit)
+            .offset(offset)
         )
         result = await self._session.scalars(statement)
         return list(result)
@@ -48,6 +62,18 @@ class FeedbackRepository:
         return await self._session.scalar(statement)
 
     async def mark_as_read(self, feedback: FeedbackMessage) -> FeedbackMessage:
+        feedback.is_read = True
+        await self._session.flush()
+        return feedback
+
+    async def save_admin_reply(
+        self,
+        feedback: FeedbackMessage,
+        reply_text: str,
+        replied_at: datetime,
+    ) -> FeedbackMessage:
+        feedback.admin_reply_text = reply_text
+        feedback.admin_replied_at = replied_at
         feedback.is_read = True
         await self._session.flush()
         return feedback

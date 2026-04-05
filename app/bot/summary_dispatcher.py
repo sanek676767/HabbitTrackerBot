@@ -160,7 +160,7 @@ def _build_weekly_summary_text(summary: WeeklyProgressSummary) -> str:
             f"Всего выполнений за неделю: {summary.total_completions}",
             f"Средний процент выполнения: {_format_percentage(summary.average_completion_rate)}",
             f"Лучшая привычка недели: {best_habit_text}",
-            f"Лучший streak: {best_streak_text}",
+            f"Лучшая серия: {best_streak_text}",
             f"Нуждаются во внимании: {problem_habits_text}",
             "",
             "Неделя выглядит устойчиво. Дальше лучше просто держать ритм.",

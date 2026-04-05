@@ -83,24 +83,28 @@ class UserRepository:
         result = await self._session.scalars(statement)
         return list(result)
 
-    async def search_users(self, query: str, *, limit: int = 20) -> list[User]:
-        normalized_query = query.strip()
-        statement = select(User)
-
-        if normalized_query:
-            like_query = f"%{normalized_query}%"
-            statement = statement.where(
-                or_(
-                    cast(User.telegram_id, String).ilike(like_query),
-                    User.username.ilike(like_query),
-                    User.first_name.ilike(like_query),
-                    User.last_name.ilike(like_query),
-                )
-            )
-
-        statement = statement.order_by(User.id.asc()).limit(limit)
+    async def search_users(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[User]:
+        statement = self._apply_search_filter(
+            select(User),
+            query,
+        ).order_by(User.id.asc())
+        statement = statement.limit(limit).offset(offset)
         result = await self._session.scalars(statement)
         return list(result)
+
+    async def count_search_users(self, query: str) -> int:
+        statement = self._apply_search_filter(
+            select(func.count(User.id)),
+            query,
+        )
+        result = await self._session.scalar(statement)
+        return int(result or 0)
 
     async def update_is_blocked(self, user: User, is_blocked: bool) -> User:
         user.is_blocked = is_blocked
@@ -134,3 +138,19 @@ class UserRepository:
         user.last_weekly_summary_sent_for_week_start = week_start
         await self._session.flush()
         return user
+
+    @staticmethod
+    def _apply_search_filter(statement, query: str):
+        normalized_query = query.strip()
+        if not normalized_query:
+            return statement
+
+        like_query = f"%{normalized_query}%"
+        return statement.where(
+            or_(
+                cast(User.telegram_id, String).ilike(like_query),
+                User.username.ilike(like_query),
+                User.first_name.ilike(like_query),
+                User.last_name.ilike(like_query),
+            )
+        )

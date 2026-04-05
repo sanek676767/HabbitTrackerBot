@@ -39,7 +39,7 @@ async def start_create_habit(
 
     await state.set_state(CreateHabitStates.waiting_for_title)
     await message.answer(
-        "Введите название привычки:",
+        "Как назвать привычку?",
         reply_markup=get_create_habit_keyboard(),
     )
 
@@ -56,7 +56,7 @@ async def cancel_create_habit_from_button(
     if callback.message is not None:
         await callback.message.edit_text("Создание привычки отменено.")
         await callback.message.answer(
-            "Возвращаю в главное меню.",
+            "Можно выбрать другое действие в меню.",
             reply_markup=get_main_menu_keyboard(),
         )
     await callback.answer()
@@ -87,7 +87,7 @@ async def save_habit_title(
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
         await message.answer(
-            "Сначала заверши создание привычки или нажми «⬅️ Назад».",
+            "Сначала отправь название или нажми «⬅️ Назад».",
             reply_markup=get_create_habit_keyboard(),
         )
         return

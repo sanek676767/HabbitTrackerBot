@@ -4,6 +4,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from app.bot.callbacks import (
     HabitArchiveCallback,
     HabitDeleteCallback,
+    HabitDeleteConfirmCallback,
     HabitDoneCallback,
     HabitListCallback,
     HabitListSource,
@@ -14,6 +15,7 @@ from app.bot.callbacks import (
 from app.bot.keyboards import (
     MY_HABITS_BUTTON,
     get_habit_card_keyboard,
+    get_habit_delete_confirm_keyboard,
     get_habit_stats_keyboard,
     get_habits_list_keyboard,
 )
@@ -39,7 +41,7 @@ async def show_my_habits(
     habit_service: HabitService,
 ) -> None:
     if message.from_user is None:
-        await message.answer("Не удалось определить пользователя Telegram.")
+        await message.answer("Не удалось определить пользователя.")
         return
 
     user = await user_service.get_by_telegram_id(message.from_user.id)
@@ -155,7 +157,7 @@ async def complete_habit(
             is_active=habit_card.is_active,
         ),
     )
-    await callback.answer("Отмечено на сегодня.")
+    await callback.answer("Готово.")
 
 
 @router.callback_query(HabitStatsCallback.filter())
@@ -224,7 +226,7 @@ async def archive_habit(
         text, reply_markup = await _build_active_screen(user.id, habit_service)
 
     await callback.message.edit_text(text, reply_markup=reply_markup)
-    await callback.answer("Привычка архивирована.")
+    await callback.answer("Привычка перенесена в архив.")
 
 
 @router.callback_query(HabitRestoreCallback.filter())
@@ -258,9 +260,44 @@ async def restore_habit(
 
 
 @router.callback_query(HabitDeleteCallback.filter())
-async def delete_habit(
+async def ask_delete_habit(
     callback: CallbackQuery,
     callback_data: HabitDeleteCallback,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    if callback.from_user is None or callback.message is None:
+        await callback.answer()
+        return
+
+    user = await user_service.get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала отправьте /start.", show_alert=True)
+        return
+
+    try:
+        habit_card = await habit_service.get_habit_card(user.id, callback_data.habit_id)
+    except HabitNotFoundError:
+        await callback.answer("Привычка не найдена.", show_alert=True)
+        return
+    except HabitDeletedError as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        _build_delete_confirm_text(habit_card),
+        reply_markup=get_habit_delete_confirm_keyboard(
+            habit_card.id,
+            callback_data.source,
+        ),
+    )
+    await callback.answer()
+
+
+@router.callback_query(HabitDeleteConfirmCallback.filter())
+async def delete_habit(
+    callback: CallbackQuery,
+    callback_data: HabitDeleteConfirmCallback,
     user_service: UserService,
     habit_service: HabitService,
 ) -> None:
@@ -300,7 +337,7 @@ async def _build_active_screen(
     habits = await habit_service.get_active_habits(user_id)
     if habits:
         return (
-            "Твои активные привычки:\nВыбери привычку, чтобы открыть карточку.",
+            "📋 Мои привычки\nВыбери привычку, чтобы открыть карточку.",
             get_habits_list_keyboard(
                 habits,
                 HabitListSource.LIST.value,
@@ -311,7 +348,7 @@ async def _build_active_screen(
     archived_habits = await habit_service.get_archived_habits(user_id)
     if archived_habits:
         return (
-            "Активных привычек пока нет. Но у тебя есть привычки в архиве.",
+            "Активных привычек пока нет.\nНиже можно открыть архив.",
             get_habits_list_keyboard(
                 archived_habits,
                 HabitListSource.ARCHIVE.value,
@@ -319,7 +356,7 @@ async def _build_active_screen(
             ),
         )
 
-    return ("У тебя пока нет активных привычек.", None)
+    return ("Пока нет ни одной привычки. Начни с кнопки «➕ Добавить привычку».", None)
 
 
 async def _build_archive_screen(
@@ -329,7 +366,7 @@ async def _build_archive_screen(
     habits = await habit_service.get_archived_habits(user_id)
     if not habits:
         return (
-            "Архив пуст. Здесь будут привычки, которые ты архивировал.",
+            "🗂 Архив пока пуст.",
             get_habits_list_keyboard(
                 [],
                 HabitListSource.ARCHIVE.value,
@@ -338,7 +375,7 @@ async def _build_archive_screen(
         )
 
     return (
-        "Архив привычек:\nЗдесь можно открыть привычку и вернуть её в активные.",
+        "🗂 Архив\nЗдесь лежат привычки, которые ты убрал из активных.",
         get_habits_list_keyboard(
             habits,
             HabitListSource.ARCHIVE.value,
@@ -353,10 +390,10 @@ async def _build_today_screen(
 ) -> tuple[str, InlineKeyboardMarkup | None]:
     habits = await habit_service.get_today_habits(user_id)
     if not habits:
-        return ("У тебя пока нет активных привычек на сегодня.", None)
+        return ("На сегодня активных привычек пока нет.", None)
 
     return (
-        "Сегодня:\nВыбери привычку, чтобы открыть карточку.",
+        "🔥 Сегодня\nВыбери привычку, чтобы открыть карточку.",
         get_habits_list_keyboard(
             habits,
             HabitListSource.TODAY.value,
@@ -366,21 +403,21 @@ async def _build_today_screen(
 
 
 def _build_habit_card_text(habit_card: HabitCard) -> str:
-    today_status = "Выполнена" if habit_card.is_completed_today else "Не выполнена"
-    active_status = "Активная" if habit_card.is_active else "В архиве"
+    today_status = "выполнена" if habit_card.is_completed_today else "ещё не выполнена"
+    active_status = "активна" if habit_card.is_active else "в архиве"
     reminder_status = (
         habit_card.reminder_time.strftime("%H:%M")
         if habit_card.reminder_enabled and habit_card.reminder_time is not None
-        else "Выключено"
+        else "выключено"
     )
     return "\n".join(
         [
             f"📌 {html.quote(habit_card.title)}",
             "",
             f"Сегодня: {today_status}",
-            f"Всего выполнений: {habit_card.total_completions}",
             f"Текущая серия: {habit_card.current_streak}",
             f"Лучшая серия: {habit_card.best_streak}",
+            f"Всего отметок: {habit_card.total_completions}",
             f"Напоминание: {reminder_status}",
             f"Статус: {active_status}",
         ]
@@ -388,20 +425,30 @@ def _build_habit_card_text(habit_card: HabitCard) -> str:
 
 
 def _build_habit_stats_text(stats: HabitStats) -> str:
-    today_status = "Да" if stats.is_completed_today else "Нет"
-    created_at = stats.created_at.strftime("%d.%m.%Y %H:%M UTC")
+    today_status = "да" if stats.is_completed_today else "нет"
+    created_at = stats.created_at.strftime("%d.%m.%Y %H:%M")
     return "\n".join(
         [
-            f"📈 Статистика: {html.quote(stats.title)}",
+            f"📊 {html.quote(stats.title)}",
             "",
-            f"Всего выполнений: {stats.total_completions}",
-            f"Выполнена сегодня: {today_status}",
+            f"Сегодня отмечена: {today_status}",
             f"Текущая серия: {stats.current_streak}",
             f"Лучшая серия: {stats.best_streak}",
+            f"Всего отметок: {stats.total_completions}",
             "",
             "Последние 7 дней:",
             stats.last_7_days_progress_text,
             "",
-            f"Дата создания: {created_at}",
+            f"Создана: {created_at}",
+        ]
+    )
+
+
+def _build_delete_confirm_text(habit_card: HabitCard) -> str:
+    return "\n".join(
+        [
+            f"🗑 Удалить привычку «{html.quote(habit_card.title)}»?",
+            "",
+            "Она исчезнет из твоих списков. Если понадобится, её сможет вернуть администратор.",
         ]
     )

@@ -27,7 +27,13 @@ class HabitRepository:
         await self._session.flush()
         return habit
 
-    async def get_active_habits_by_user(self, user_id: int) -> list[Habit]:
+    async def get_active_habits_by_user(
+        self,
+        user_id: int,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Habit]:
         statement = (
             select(Habit)
             .where(
@@ -37,10 +43,17 @@ class HabitRepository:
             )
             .order_by(Habit.created_at.asc(), Habit.id.asc())
         )
+        statement = self._apply_pagination(statement, limit=limit, offset=offset)
         result = await self._session.scalars(statement)
         return list(result)
 
-    async def get_archived_habits_by_user(self, user_id: int) -> list[Habit]:
+    async def get_archived_habits_by_user(
+        self,
+        user_id: int,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Habit]:
         statement = (
             select(Habit)
             .where(
@@ -50,23 +63,52 @@ class HabitRepository:
             )
             .order_by(Habit.updated_at.desc(), Habit.id.desc())
         )
+        statement = self._apply_pagination(statement, limit=limit, offset=offset)
         result = await self._session.scalars(statement)
         return list(result)
 
-    async def get_deleted_habits_by_user(self, user_id: int) -> list[Habit]:
+    async def get_deleted_habits_by_user(
+        self,
+        user_id: int,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Habit]:
         statement = (
             select(Habit)
+            .options(selectinload(Habit.user))
             .where(
                 Habit.user_id == user_id,
                 Habit.is_deleted.is_(True),
             )
             .order_by(Habit.deleted_at.desc(), Habit.id.desc())
         )
+        statement = self._apply_pagination(statement, limit=limit, offset=offset)
+        result = await self._session.scalars(statement)
+        return list(result)
+
+    async def get_deleted_habits(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Habit]:
+        statement = (
+            select(Habit)
+            .options(selectinload(Habit.user))
+            .where(Habit.is_deleted.is_(True))
+            .order_by(Habit.deleted_at.desc(), Habit.id.desc())
+        )
+        statement = self._apply_pagination(statement, limit=limit, offset=offset)
         result = await self._session.scalars(statement)
         return list(result)
 
     async def get_habit_by_id(self, habit_id: int) -> Habit | None:
-        statement = select(Habit).where(Habit.id == habit_id)
+        statement = (
+            select(Habit)
+            .options(selectinload(Habit.user))
+            .where(Habit.id == habit_id)
+        )
         return await self._session.scalar(statement)
 
     async def get_habit_by_id_for_user(self, habit_id: int, user_id: int) -> Habit | None:
@@ -178,3 +220,9 @@ class HabitRepository:
             statement = statement.where(Habit.user_id == user_id)
         result = await self._session.scalar(statement)
         return int(result or 0)
+
+    @staticmethod
+    def _apply_pagination(statement, *, limit: int | None, offset: int):
+        if limit is None:
+            return statement
+        return statement.limit(limit).offset(offset)
