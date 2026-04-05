@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.callbacks import (

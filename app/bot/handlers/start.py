@@ -23,15 +23,13 @@ async def start_handler(message: Message, user_service: UserService) -> None:
     )
 
     greeting_name = html.quote(message.from_user.first_name or "друг")
-    if is_created:
-        text = _build_onboarding_text(greeting_name)
-    else:
-        text = _build_returning_user_text(greeting_name)
-
-    await message.answer(
-        text,
-        reply_markup=get_main_menu_keyboard(),
+    text = (
+        _build_onboarding_text(greeting_name)
+        if is_created
+        else _build_returning_user_text(greeting_name)
     )
+
+    await message.answer(text, reply_markup=get_main_menu_keyboard())
 
 
 def _build_onboarding_text(greeting_name: str) -> str:
@@ -39,18 +37,18 @@ def _build_onboarding_text(greeting_name: str) -> str:
         [
             f"Привет, {greeting_name}!",
             "",
-            "Это бот для ежедневных привычек и спокойного ритма без лишнего шума.",
+            "Это бот для привычек с понятным ритмом и без лишнего шума.",
             "",
             "Здесь можно:",
-            "• добавлять привычки и отмечать их каждый день",
+            "• добавлять привычки с удобным расписанием",
+            "• отмечать то, что запланировано на сегодня",
             "• включать напоминания на удобное время",
             "• смотреть серии, прогресс и сводки",
-            "• убирать привычки в архив, если они пока не нужны",
             "",
             "С чего начать:",
             "1. Нажми «➕ Добавить привычку»",
-            "2. Открой «🔥 Сегодня», чтобы отмечать выполнение",
-            "3. Загляни в «📈 Прогресс», чтобы увидеть общую картину",
+            "2. Выбери частоту и, если нужно, включи напоминание",
+            "3. Загляни в «🔥 Сегодня», чтобы отмечать выполнение",
             "",
             "Если захочешь быстро освоиться, открой «❓ Помощь».",
         ]
@@ -63,8 +61,8 @@ def _build_returning_user_text(greeting_name: str) -> str:
             f"С возвращением, {greeting_name}.",
             "",
             "Главные разделы уже на месте:",
-            "• «🔥 Сегодня» — отметить привычки за день",
-            "• «📈 Прогресс» — посмотреть общую картину",
-            "• «❓ Помощь» — быстро вспомнить, как всё устроено",
+            "• «🔥 Сегодня» — что запланировано на сегодня",
+            "• «📈 Прогресс» — как идёт общий ритм",
+            "• «❓ Помощь» — коротко о том, как всё устроено",
         ]
     )

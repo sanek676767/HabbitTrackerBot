@@ -1,11 +1,4 @@
-from aiogram.types import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-)
-
-from app.bot.callbacks import CreateHabitCallback
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 
 ADD_HABIT_BUTTON = "➕ Добавить привычку"
@@ -16,6 +9,7 @@ PROFILE_BUTTON = "👤 Профиль"
 HELP_BUTTON = "❓ Помощь"
 FEEDBACK_BUTTON = "💬 Обратная связь"
 BACK_TO_MENU_BUTTON = "⬅️ Назад"
+
 ALL_MAIN_MENU_BUTTONS = {
     ADD_HABIT_BUTTON,
     MY_HABITS_BUTTON,
@@ -37,17 +31,4 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
         ],
         resize_keyboard=True,
         input_field_placeholder="Выбери действие",
-    )
-
-
-def get_create_habit_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=BACK_TO_MENU_BUTTON,
-                    callback_data=CreateHabitCallback(action="cancel").pack(),
-                )
-            ]
-        ]
     )

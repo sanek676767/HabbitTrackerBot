@@ -90,14 +90,14 @@ class UserService:
     def parse_local_time(raw_time: str) -> time:
         normalized_time = raw_time.strip()
         if not LOCAL_TIME_PATTERN.fullmatch(normalized_time):
-            raise UserTimeValidationError("Введите текущее время в формате ЧЧ:ММ.")
+            raise UserTimeValidationError("Введи текущее время в формате ЧЧ:ММ.")
 
         hours, minutes = normalized_time.split(":")
         hour = int(hours)
         minute = int(minutes)
 
         if hour > 23 or minute > 59:
-            raise UserTimeValidationError("Введите корректное время в формате ЧЧ:ММ.")
+            raise UserTimeValidationError("Введи корректное время в формате ЧЧ:ММ.")
 
         return time(hour=hour, minute=minute)
 

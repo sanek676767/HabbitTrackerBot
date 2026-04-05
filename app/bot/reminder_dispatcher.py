@@ -37,8 +37,8 @@ async def dispatch_due_reminders(
             await bot.send_message(
                 chat_id=reminder.telegram_id,
                 text=(
-                    "Напоминание: пора выполнить привычку "
-                    f"«{html.quote(reminder.habit_title)}»"
+                    "Напоминание: пора вернуться к привычке "
+                    f"«{html.quote(reminder.habit_title)}»."
                 ),
                 reply_markup=get_habit_reminder_notification_keyboard(reminder.habit_id),
             )

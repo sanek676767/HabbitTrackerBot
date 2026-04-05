@@ -78,10 +78,11 @@ def get_habit_card_keyboard(
     *,
     is_completed_today: bool,
     is_active: bool,
+    is_due_today: bool,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
 
-    if is_active and not is_completed_today:
+    if is_active and is_due_today and not is_completed_today:
         rows.append(
             [
                 InlineKeyboardButton(

@@ -48,10 +48,20 @@ async def test_due_reminder_logic_filters_out_completed_and_non_matching_habits(
         reminder_time=time(21, 40),
         user=make_user(telegram_id=103, utc_offset_minutes=180),
     )
+    not_due_today_habit = make_habit(
+        id=4,
+        title="Stretch",
+        frequency_type="interval",
+        frequency_interval=2,
+        start_date=date(2026, 4, 3),
+        reminder_enabled=True,
+        reminder_time=time(21, 35),
+        user=make_user(telegram_id=104, utc_offset_minutes=180),
+    )
 
     service = ReminderService(
         habit_repository=FakeHabitRepository(
-            [due_habit, completed_habit, different_time_habit]
+            [due_habit, completed_habit, different_time_habit, not_due_today_habit]
         ),
         habit_log_repository=FakeHabitLogRepository({(2, local_date)}),
     )

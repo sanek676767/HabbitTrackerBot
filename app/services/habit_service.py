@@ -5,9 +5,14 @@ from datetime import date, datetime, time, timedelta, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.habit import Habit, HabitFrequencyType
+from app.models.habit import Habit
 from app.repositories.habit_log_repository import HabitLogRepository
 from app.repositories.habit_repository import HabitRepository
+from app.services.habit_schedule_service import (
+    HabitScheduleConfig,
+    HabitScheduleService,
+    HabitScheduleValidationError,
+)
 
 
 TITLE_MAX_LENGTH = 100
@@ -43,6 +48,10 @@ class HabitAlreadyCompletedError(HabitServiceError):
     pass
 
 
+class HabitNotDueTodayError(HabitServiceError):
+    pass
+
+
 @dataclass(slots=True)
 class HabitListItem:
     id: int
@@ -61,12 +70,14 @@ class HabitCard:
     id: int
     title: str
     is_completed_today: bool
+    is_due_today: bool
     total_completions: int
     current_streak: int
     best_streak: int
     is_active: bool
     reminder_enabled: bool
     reminder_time: time | None
+    frequency_text: str
 
 
 @dataclass(slots=True)
@@ -75,19 +86,23 @@ class HabitStats:
     title: str
     total_completions: int
     is_completed_today: bool
+    is_due_today: bool
     current_streak: int
     best_streak: int
     last_7_days_progress_text: str
     created_at: datetime
+    frequency_text: str
 
 
 @dataclass(slots=True)
 class HabitProgressSummary:
     total_completions: int
     is_completed_today: bool
+    is_due_today: bool
     current_streak: int
     best_streak: int
     last_7_days_progress_text: str
+    frequency_text: str
 
 
 class HabitService:
@@ -101,12 +116,34 @@ class HabitService:
         self._habit_repository = habit_repository
         self._habit_log_repository = habit_log_repository
 
-    async def create_habit(self, user_id: int, title: str) -> Habit:
-        normalized_title = self._normalize_title(title)
+    async def create_habit(
+        self,
+        user_id: int,
+        title: str,
+        *,
+        frequency_type: str = HabitScheduleService.DAILY,
+        frequency_interval: int | None = None,
+        week_days_mask: int | None = None,
+        reminder_enabled: bool = False,
+        reminder_time: time | None = None,
+        start_date: date | None = None,
+    ) -> Habit:
+        normalized_title = self.validate_title(title)
+        schedule = self.build_schedule_config(
+            frequency_type=frequency_type,
+            frequency_interval=frequency_interval,
+            week_days_mask=week_days_mask,
+            start_date=start_date,
+        )
         habit = await self._habit_repository.create_habit(
             user_id=user_id,
             title=normalized_title,
-            frequency_type=HabitFrequencyType.DAILY.value,
+            frequency_type=schedule.frequency_type,
+            frequency_interval=schedule.frequency_interval,
+            week_days_mask=schedule.week_days_mask,
+            start_date=schedule.start_date,
+            reminder_enabled=reminder_enabled,
+            reminder_time=reminder_time,
         )
         await self._session.commit()
         await self._session.refresh(habit)
@@ -114,7 +151,7 @@ class HabitService:
 
     async def rename_habit(self, user_id: int, habit_id: int, title: str) -> HabitCard:
         habit = await self._get_visible_user_habit(user_id, habit_id)
-        normalized_title = self._normalize_title(title)
+        normalized_title = self.validate_title(title)
 
         await self._habit_repository.update_title(habit, normalized_title)
         await self._session.commit()
@@ -130,7 +167,7 @@ class HabitService:
         habit = await self._get_visible_user_habit(user_id, habit_id)
         self._ensure_reminder_can_be_enabled(habit)
 
-        parsed_time = self._parse_reminder_time(reminder_time)
+        parsed_time = self.parse_reminder_time(reminder_time)
         await self._habit_repository.update_reminder(
             habit,
             enabled=True,
@@ -158,7 +195,7 @@ class HabitService:
         habit = await self._get_visible_user_habit(user_id, habit_id)
         self._ensure_reminder_can_be_enabled(habit)
 
-        parsed_time = self._parse_reminder_time(reminder_time)
+        parsed_time = self.parse_reminder_time(reminder_time)
         await self._habit_repository.update_reminder(
             habit,
             enabled=True,
@@ -184,25 +221,30 @@ class HabitService:
 
     async def get_habit_card(self, user_id: int, habit_id: int) -> HabitCard:
         habit = await self._get_visible_user_habit(user_id, habit_id)
-        progress = await self._build_progress_summary(habit.id)
+        progress = await self._build_progress_summary(habit)
         return HabitCard(
             id=habit.id,
             title=habit.title,
             is_completed_today=progress.is_completed_today,
+            is_due_today=progress.is_due_today,
             total_completions=progress.total_completions,
             current_streak=progress.current_streak,
             best_streak=progress.best_streak,
             is_active=habit.is_active,
             reminder_enabled=habit.reminder_enabled,
             reminder_time=habit.reminder_time,
+            frequency_text=progress.frequency_text,
         )
 
     async def complete_habit_for_today(self, user_id: int, habit_id: int) -> HabitCard:
         habit = await self._get_visible_user_habit(user_id, habit_id)
         if not habit.is_active:
-            raise HabitArchivedError("Архивную привычку нельзя отметить на сегодня.")
+            raise HabitArchivedError("Архивную привычку нельзя отметить.")
 
         today = self._get_today()
+        if not HabitScheduleService.is_habit_due_on_date(habit, today):
+            raise HabitNotDueTodayError("Сегодня эта привычка не запланирована.")
+
         if await self._habit_log_repository.is_completed_for_date(habit.id, today):
             raise HabitAlreadyCompletedError("Эта привычка уже отмечена на сегодня.")
 
@@ -221,16 +263,18 @@ class HabitService:
 
     async def get_habit_stats(self, user_id: int, habit_id: int) -> HabitStats:
         habit = await self._get_visible_user_habit(user_id, habit_id)
-        progress = await self._build_progress_summary(habit.id)
+        progress = await self._build_progress_summary(habit)
         return HabitStats(
             id=habit.id,
             title=habit.title,
             total_completions=progress.total_completions,
             is_completed_today=progress.is_completed_today,
+            is_due_today=progress.is_due_today,
             current_streak=progress.current_streak,
             best_streak=progress.best_streak,
             last_7_days_progress_text=progress.last_7_days_progress_text,
             created_at=habit.created_at,
+            frequency_text=progress.frequency_text,
         )
 
     async def archive_habit(self, user_id: int, habit_id: int) -> bool:
@@ -263,6 +307,11 @@ class HabitService:
     async def get_today_habits(self, user_id: int) -> list[HabitListItem]:
         today = self._get_today()
         habits = await self._habit_repository.get_active_habits_by_user(user_id)
+        due_habits = [
+            habit
+            for habit in habits
+            if HabitScheduleService.is_habit_due_on_date(habit, today)
+        ]
         completed_ids = set(
             await self._habit_log_repository.get_completed_habit_ids_for_user_by_date(
                 user_id,
@@ -275,11 +324,20 @@ class HabitService:
                 title=habit.title,
                 is_completed_today=habit.id in completed_ids,
             )
-            for habit in habits
+            for habit in due_habits
         ]
 
     async def count_active_habits(self, user_id: int) -> int:
         return await self._habit_repository.count_active_habits(user_id)
+
+    async def count_due_today(self, user_id: int, target_date: date | None = None) -> int:
+        habits = await self._habit_repository.get_active_habits_by_user(user_id)
+        due_date = target_date or self._get_today()
+        return sum(
+            1
+            for habit in habits
+            if HabitScheduleService.is_habit_due_on_date(habit, due_date)
+        )
 
     async def count_completed_today(self, user_id: int) -> int:
         return await self._habit_log_repository.count_completed_today_for_user(
@@ -287,20 +345,85 @@ class HabitService:
             self._get_today(),
         )
 
-    async def _build_progress_summary(self, habit_id: int) -> HabitProgressSummary:
-        completion_dates = await self._habit_log_repository.get_completion_dates(habit_id)
+    @staticmethod
+    def validate_title(title: str) -> str:
+        normalized_title = title.strip()
+        if not normalized_title:
+            raise HabitValidationError("Название не должно быть пустым.")
+        if len(normalized_title) > TITLE_MAX_LENGTH:
+            raise HabitValidationError(
+                f"Название должно быть не длиннее {TITLE_MAX_LENGTH} символов."
+            )
+        return normalized_title
+
+    @staticmethod
+    def parse_reminder_time(raw_time: str) -> time:
+        normalized_time = raw_time.strip()
+        if not REMINDER_TIME_PATTERN.fullmatch(normalized_time):
+            raise HabitReminderValidationError("Введи время в формате ЧЧ:ММ.")
+
+        hours, minutes = normalized_time.split(":")
+        hour = int(hours)
+        minute = int(minutes)
+
+        if hour > 23 or minute > 59:
+            raise HabitReminderValidationError(
+                "Похоже, время указано неверно. Используй формат ЧЧ:ММ."
+            )
+
+        return time(hour=hour, minute=minute)
+
+    @staticmethod
+    def build_schedule_config(
+        *,
+        frequency_type: str,
+        frequency_interval: int | None = None,
+        week_days_mask: int | None = None,
+        start_date: date | None = None,
+    ) -> HabitScheduleConfig:
+        try:
+            return HabitScheduleService.validate_schedule(
+                frequency_type=frequency_type,
+                frequency_interval=frequency_interval,
+                week_days_mask=week_days_mask,
+                start_date=start_date,
+            )
+        except HabitScheduleValidationError as error:
+            raise HabitValidationError(str(error)) from error
+
+    @staticmethod
+    def format_schedule(habit: Habit) -> str:
+        return HabitScheduleService.format_schedule(habit)
+
+    @staticmethod
+    def format_schedule_config(schedule: HabitScheduleConfig) -> str:
+        return HabitScheduleService.format_schedule_config(schedule)
+
+    async def _build_progress_summary(self, habit: Habit) -> HabitProgressSummary:
+        completion_dates = await self._habit_log_repository.get_completion_dates(habit.id)
         completion_date_set = set(completion_dates)
         today = self._get_today()
 
         return HabitProgressSummary(
             total_completions=len(completion_dates),
             is_completed_today=today in completion_date_set,
-            current_streak=self._calculate_current_streak(completion_date_set, today),
-            best_streak=self._calculate_best_streak(completion_dates),
-            last_7_days_progress_text=self._build_last_7_days_progress_text(
+            is_due_today=HabitScheduleService.is_habit_due_on_date(habit, today),
+            current_streak=HabitScheduleService.calculate_current_streak(
+                habit,
                 completion_date_set,
                 today,
             ),
+            best_streak=HabitScheduleService.calculate_best_streak(
+                habit,
+                completion_date_set,
+                today,
+            ),
+            last_7_days_progress_text=self._build_last_7_days_progress_text(
+                habit,
+                completion_date_set,
+                today,
+            ),
+            frequency_text=HabitScheduleService.format_schedule(habit),
         )
 
     async def _get_visible_user_habit(self, user_id: int, habit_id: int) -> Habit:
@@ -316,74 +439,23 @@ class HabitService:
         return habit
 
     @staticmethod
-    def _normalize_title(title: str) -> str:
-        normalized_title = title.strip()
-        if not normalized_title:
-            raise HabitValidationError("Название не должно быть пустым.")
-        if len(normalized_title) > TITLE_MAX_LENGTH:
-            raise HabitValidationError(
-                f"Название должно быть не длиннее {TITLE_MAX_LENGTH} символов."
-            )
-        return normalized_title
-
-    @staticmethod
-    def _parse_reminder_time(raw_time: str) -> time:
-        normalized_time = raw_time.strip()
-        if not REMINDER_TIME_PATTERN.fullmatch(normalized_time):
-            raise HabitReminderValidationError("Введи время в формате ЧЧ:ММ.")
-
-        hours, minutes = normalized_time.split(":")
-        hour = int(hours)
-        minute = int(minutes)
-
-        if hour > 23 or minute > 59:
-            raise HabitReminderValidationError("Похоже, время указано неверно. Используй формат ЧЧ:ММ.")
-
-        return time(hour=hour, minute=minute)
-
-    @staticmethod
-    def _calculate_current_streak(completion_dates: set[date], today: date) -> int:
-        if today in completion_dates:
-            anchor_date = today
-        elif today - timedelta(days=1) in completion_dates:
-            anchor_date = today - timedelta(days=1)
-        else:
-            return 0
-
-        streak = 0
-        cursor = anchor_date
-        while cursor in completion_dates:
-            streak += 1
-            cursor -= timedelta(days=1)
-        return streak
-
-    @staticmethod
-    def _calculate_best_streak(completion_dates: list[date]) -> int:
-        if not completion_dates:
-            return 0
-
-        best_streak = 1
-        current_streak = 1
-
-        for previous_date, current_date in zip(completion_dates, completion_dates[1:]):
-            if current_date == previous_date + timedelta(days=1):
-                current_streak += 1
-            else:
-                best_streak = max(best_streak, current_streak)
-                current_streak = 1
-
-        return max(best_streak, current_streak)
-
-    @staticmethod
-    def _build_last_7_days_progress_text(completion_dates: set[date], today: date) -> str:
+    def _build_last_7_days_progress_text(
+        habit: Habit,
+        completion_dates: set[date],
+        today: date,
+    ) -> str:
         days = [
             today - timedelta(days=offset)
             for offset in reversed(range(LAST_7_DAYS_WINDOW))
         ]
-        return "\n".join(
-            f"{day.strftime('%d.%m')}: {'✅' if day in completion_dates else '⬜'}"
-            for day in days
-        )
+        lines: list[str] = []
+        for day in days:
+            if HabitScheduleService.is_habit_due_on_date(habit, day):
+                marker = "✅" if day in completion_dates else "⬜"
+            else:
+                marker = "—"
+            lines.append(f"{day.strftime('%d.%m')}: {marker}")
+        return "\n".join(lines)
 
     @staticmethod
     def _ensure_reminder_can_be_enabled(habit: Habit) -> None:

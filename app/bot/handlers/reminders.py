@@ -49,7 +49,7 @@ async def open_reminder_menu(
 
     user = await user_service.get_by_telegram_id(callback.from_user.id)
     if user is None:
-        await callback.answer("Сначала отправьте /start.", show_alert=True)
+        await callback.answer("Сначала отправь /start.", show_alert=True)
         return
 
     try:
@@ -93,7 +93,7 @@ async def start_reminder_setup(
 
     user = await user_service.get_by_telegram_id(callback.from_user.id)
     if user is None:
-        await callback.answer("Сначала отправьте /start.", show_alert=True)
+        await callback.answer("Сначала отправь /start.", show_alert=True)
         return
 
     try:
@@ -122,10 +122,7 @@ async def start_reminder_setup(
         await state.set_state(HabitReminderStates.waiting_for_current_time)
         await callback.message.edit_text(
             _build_current_local_time_prompt_text(habit_card),
-            reply_markup=get_habit_reminder_input_keyboard(
-                habit_card.id,
-                callback_data.source,
-            ),
+            reply_markup=get_habit_reminder_input_keyboard(habit_card.id, callback_data.source),
         )
         await callback.answer()
         return
@@ -133,10 +130,7 @@ async def start_reminder_setup(
     await state.set_state(HabitReminderStates.waiting_for_time)
     await callback.message.edit_text(
         _build_reminder_time_prompt_text(habit_card, reminder_state),
-        reply_markup=get_habit_reminder_input_keyboard(
-            habit_card.id,
-            callback_data.source,
-        ),
+        reply_markup=get_habit_reminder_input_keyboard(habit_card.id, callback_data.source),
     )
     await callback.answer()
 
@@ -162,7 +156,7 @@ async def cancel_reminder_setup(
 
     user = await user_service.get_by_telegram_id(callback.from_user.id)
     if user is None:
-        await callback.answer("Сначала отправьте /start.", show_alert=True)
+        await callback.answer("Сначала отправь /start.", show_alert=True)
         return
 
     try:
@@ -182,6 +176,7 @@ async def cancel_reminder_setup(
             callback_data.source,
             is_completed_today=habit_card.is_completed_today,
             is_active=habit_card.is_active,
+            is_due_today=habit_card.is_due_today,
         ),
     )
     await callback.answer("Настройку напоминания отменил.")
@@ -200,7 +195,7 @@ async def disable_reminder(
 
     user = await user_service.get_by_telegram_id(callback.from_user.id)
     if user is None:
-        await callback.answer("Сначала отправьте /start.", show_alert=True)
+        await callback.answer("Сначала отправь /start.", show_alert=True)
         return
 
     try:
@@ -220,6 +215,7 @@ async def disable_reminder(
             callback_data.source,
             is_completed_today=habit_card.is_completed_today,
             is_active=habit_card.is_active,
+            is_due_today=habit_card.is_due_today,
         ),
     )
     await callback.answer("Напоминание выключено.")
@@ -239,11 +235,11 @@ async def save_current_local_time(
     user = await user_service.get_by_telegram_id(message.from_user.id)
     if user is None:
         await state.clear()
-        await message.answer("Сначала отправьте /start.")
+        await message.answer("Сначала отправь /start.")
         return
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
-        await message.answer("Сначала пришли текущее местное время или нажми «⬅️ Отмена».")
+        await message.answer("Пришли своё текущее местное время или нажми «Отмена».")
         return
 
     state_data = await state.get_data()
@@ -263,10 +259,7 @@ async def save_current_local_time(
         return
 
     try:
-        await user_service.set_utc_offset_from_local_time(
-            user.id,
-            message.text or "",
-        )
+        await user_service.set_utc_offset_from_local_time(user.id, message.text or "")
         habit_card = await habit_service.get_habit_card(user.id, habit_id)
         reminder_state = await habit_service.get_habit_reminder_state(user.id, habit_id)
     except UserTimeValidationError as error:
@@ -299,7 +292,7 @@ async def save_current_local_time(
         prompt_message_id=new_prompt_message_id,
     )
 
-    await message.answer("Запомнил местное время. Теперь укажи, когда напоминать.")
+    await message.answer("Запомнил твоё местное время. Теперь укажи время напоминания.")
 
 
 @router.message(HabitReminderStates.waiting_for_time)
@@ -316,11 +309,11 @@ async def save_reminder_time(
     user = await user_service.get_by_telegram_id(message.from_user.id)
     if user is None:
         await state.clear()
-        await message.answer("Сначала отправьте /start.")
+        await message.answer("Сначала отправь /start.")
         return
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
-        await message.answer("Сначала пришли время напоминания или нажми «⬅️ Отмена».")
+        await message.answer("Пришли время напоминания или нажми «Отмена».")
         return
 
     state_data = await state.get_data()
@@ -384,6 +377,7 @@ async def save_reminder_time(
             source,
             is_completed_today=habit_card.is_completed_today,
             is_active=habit_card.is_active,
+            is_due_today=habit_card.is_due_today,
         ),
     )
     await message.answer(success_text)
@@ -403,12 +397,13 @@ def _build_reminder_menu_text(
     lines = [
         f"⏰ Напоминание для «{html.quote(habit_card.title)}»",
         "",
+        f"Частота: {habit_card.frequency_text}",
         f"Сейчас: {'включено' if reminder_state.enabled else 'выключено'}",
         f"Время: {reminder_time}",
         (
-            f"Местное время настроено: {local_time_status}"
+            f"Твоё местное время: {local_time_status}"
             if local_time_status is not None
-            else "Местное время ещё не настроено."
+            else "Твоё местное время пока не настроено."
         ),
     ]
 
@@ -442,7 +437,8 @@ def _build_current_local_time_prompt_text(habit_card: HabitCard) -> str:
         [
             f"⏰ Напоминание для «{html.quote(habit_card.title)}»",
             "",
-            "Сначала напиши, сколько у тебя сейчас времени, в формате ЧЧ:ММ.",
+            "Сначала напиши, сколько у тебя сейчас времени.",
+            "Формат: ЧЧ:ММ",
             "Например: 21:35",
         ]
     )
@@ -455,7 +451,8 @@ def _build_reminder_time_prompt_text(
     lines = [
         f"⏰ Напоминание для «{html.quote(habit_card.title)}»",
         "",
-        "Теперь напиши время напоминания в формате ЧЧ:ММ.",
+        "Теперь напиши время напоминания.",
+        "Формат: ЧЧ:ММ",
         "Например: 09:30",
     ]
 
@@ -471,17 +468,24 @@ def _build_reminder_time_prompt_text(
 
 
 def _build_habit_card_text(habit_card: HabitCard) -> str:
-    today_status = "выполнена" if habit_card.is_completed_today else "ещё не выполнена"
-    active_status = "активна" if habit_card.is_active else "в архиве"
+    if habit_card.is_completed_today:
+        today_status = "выполнена"
+    elif habit_card.is_due_today:
+        today_status = "ждёт отметку"
+    else:
+        today_status = "на сегодня не запланирована"
+
     reminder_status = (
         habit_card.reminder_time.strftime("%H:%M")
         if habit_card.reminder_enabled and habit_card.reminder_time is not None
         else "выключено"
     )
+    active_status = "активна" if habit_card.is_active else "в архиве"
     return "\n".join(
         [
             f"📌 {html.quote(habit_card.title)}",
             "",
+            f"Частота: {habit_card.frequency_text}",
             f"Сегодня: {today_status}",
             f"Текущая серия: {habit_card.current_streak}",
             f"Лучшая серия: {habit_card.best_streak}",

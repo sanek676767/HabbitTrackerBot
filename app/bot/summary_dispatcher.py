@@ -51,7 +51,10 @@ async def dispatch_due_summaries(
                 user_local_date,
                 user.last_daily_summary_sent_for_date,
             ):
-                daily_summary = await progress_service.get_daily_progress_summary(user.id)
+                daily_summary = await progress_service.get_daily_progress_summary(
+                    user.id,
+                    user_local_date,
+                )
                 if await _send_daily_summary(bot, user.telegram_id, daily_summary):
                     await user_repository.update_last_daily_summary_sent_for_date(
                         user,
@@ -65,7 +68,10 @@ async def dispatch_due_summaries(
                 user_local_date,
                 user.last_weekly_summary_sent_for_week_start,
             ):
-                weekly_summary = await progress_service.get_weekly_progress_summary(user.id)
+                weekly_summary = await progress_service.get_weekly_progress_summary(
+                    user.id,
+                    user_local_date,
+                )
                 if await _send_weekly_summary(bot, user.telegram_id, weekly_summary):
                     await user_repository.update_last_weekly_summary_sent_for_week_start(
                         user,
@@ -116,19 +122,20 @@ async def _send_weekly_summary(
 
 
 def _build_daily_summary_text(summary: DailyProgressSummary) -> str:
-    if summary.remaining_today_count == 0:
-        calm_line = "Спокойно: сегодняшний минимум уже закрыт."
+    if summary.due_today_count == 0:
+        calm_line = "Сегодня по расписанию ничего не запланировано."
+    elif summary.remaining_today_count == 0:
+        calm_line = "На сегодня всё закрыто."
     else:
-        calm_line = (
-            f"Спокойный темп: осталось ещё {summary.remaining_today_count}. "
-            "Можно закрыть их без спешки."
-        )
+        calm_line = f"Осталось закрыть ещё {summary.remaining_today_count}."
 
     return "\n".join(
         [
             "🌤 Ежедневная сводка",
             "",
-            f"Выполнено сегодня: {summary.completed_today_count} из {summary.active_habits_count}",
+            f"Активных привычек: {summary.active_habits_count}",
+            f"Запланировано на сегодня: {summary.due_today_count}",
+            f"Отмечено сегодня: {summary.completed_today_count}",
             f"Осталось на сегодня: {summary.remaining_today_count}",
             "",
             calm_line,
@@ -138,7 +145,7 @@ def _build_daily_summary_text(summary: DailyProgressSummary) -> str:
 
 def _build_weekly_summary_text(summary: WeeklyProgressSummary) -> str:
     best_habit_text = (
-        f"{html.quote(summary.best_habit_title)} - {summary.best_habit_completion_count} выполн."
+        f"{html.quote(summary.best_habit_title)} - {summary.best_habit_completion_count} раз"
         if summary.best_habit_title is not None and summary.best_habit_completion_count > 0
         else "Пока без явного лидера"
     )
@@ -162,8 +169,6 @@ def _build_weekly_summary_text(summary: WeeklyProgressSummary) -> str:
             f"Лучшая привычка недели: {best_habit_text}",
             f"Лучшая серия: {best_streak_text}",
             f"Нуждаются во внимании: {problem_habits_text}",
-            "",
-            "Неделя выглядит устойчиво. Дальше лучше просто держать ритм.",
         ]
     )
 

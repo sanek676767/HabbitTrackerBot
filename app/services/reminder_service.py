@@ -3,6 +3,7 @@ from datetime import datetime, time, timedelta, timezone
 
 from app.repositories.habit_log_repository import HabitLogRepository
 from app.repositories.habit_repository import HabitRepository
+from app.services.habit_schedule_service import HabitScheduleService
 
 
 @dataclass(slots=True)
@@ -40,6 +41,7 @@ class ReminderService:
                 normalized_utc_datetime,
                 habit.user.utc_offset_minutes,
             )
+            user_local_date = user_local_datetime.date()
             user_local_time = time(
                 hour=user_local_datetime.hour,
                 minute=user_local_datetime.minute,
@@ -48,9 +50,12 @@ class ReminderService:
             if habit.reminder_time != user_local_time:
                 continue
 
+            if not HabitScheduleService.is_habit_due_on_date(habit, user_local_date):
+                continue
+
             is_completed_today = await self._habit_log_repository.is_completed_for_date(
                 habit.id,
-                user_local_datetime.date(),
+                user_local_date,
             )
             if is_completed_today:
                 continue

@@ -135,10 +135,7 @@ class AdminService:
         query: str,
     ) -> list[AdminUserListItem]:
         await self._get_admin_actor(actor_telegram_id)
-        users = await self._user_repository.search_users(
-            query,
-            limit=USER_SEARCH_LIMIT,
-        )
+        users = await self._user_repository.search_users(query, limit=USER_SEARCH_LIMIT)
         return [self._build_user_list_item(user) for user in users]
 
     async def list_users_page(
@@ -294,10 +291,7 @@ class AdminService:
             owner_user_id=target_user.id,
             owner_telegram_id=target_user.telegram_id,
             owner_display_name=self._build_owner_display(target_user),
-            items=[
-                self._build_habit_list_item(habit, target_user)
-                for habit in habits
-            ],
+            items=[self._build_habit_list_item(habit, target_user) for habit in habits],
             pagination=pagination,
         )
 
@@ -468,4 +462,4 @@ class AdminService:
     @staticmethod
     def _ensure_can_revoke_admin(actor: User, target_user: User) -> None:
         if actor.id == target_user.id:
-            raise AdminActionValidationError("Нельзя снять admin у самого себя.")
+            raise AdminActionValidationError("Нельзя снять права администратора у самого себя.")

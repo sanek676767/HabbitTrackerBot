@@ -253,10 +253,10 @@ class FeedbackService:
             [
                 "💬 Новая обратная связь",
                 "",
-                f"Сообщение №{feedback_id}",
+                f"Номер сообщения: {feedback_id}",
                 f"Пользователь: {html.quote(full_name)}",
-                f"Telegram ID: {author.telegram_id}",
-                f"Username: {html.quote(username)}",
+                f"Идентификатор Telegram: {author.telegram_id}",
+                f"Имя пользователя: {html.quote(username)}",
                 "",
                 "Текст:",
                 html.quote(text),
@@ -269,7 +269,7 @@ class FeedbackService:
     def build_admin_reply_message(reply_text: str) -> str:
         return "\n".join(
             [
-                "💬 Ответ от команды бота",
+                "💬 Ответ от команды",
                 "",
                 html.quote(reply_text),
             ]

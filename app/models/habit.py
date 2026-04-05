@@ -1,7 +1,7 @@
-from datetime import datetime, time
+from datetime import date, datetime, time
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Time, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Time, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, CreatedAtMixin, IdMixin, UpdatedAtMixin
@@ -9,6 +9,8 @@ from app.models.base import Base, CreatedAtMixin, IdMixin, UpdatedAtMixin
 
 class HabitFrequencyType(str, Enum):
     DAILY = "daily"
+    INTERVAL = "interval"
+    WEEKDAYS = "weekdays"
 
 
 class Habit(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
@@ -25,6 +27,20 @@ class Habit(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
         nullable=False,
         default=HabitFrequencyType.DAILY.value,
         server_default=text("'daily'"),
+    )
+    frequency_interval: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    week_days_mask: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    start_date: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+        default=date.today,
+        server_default=text("CURRENT_DATE"),
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean,

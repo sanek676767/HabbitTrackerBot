@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,12 +16,23 @@ class HabitRepository:
         self,
         user_id: int,
         title: str,
+        *,
         frequency_type: str = "daily",
+        frequency_interval: int | None = None,
+        week_days_mask: int | None = None,
+        start_date: date | None = None,
+        reminder_enabled: bool = False,
+        reminder_time: time | None = None,
     ) -> Habit:
         habit = Habit(
             user_id=user_id,
             title=title,
             frequency_type=frequency_type,
+            frequency_interval=frequency_interval,
+            week_days_mask=week_days_mask,
+            start_date=start_date or date.today(),
+            reminder_enabled=reminder_enabled,
+            reminder_time=reminder_time,
         )
         self._session.add(habit)
         await self._session.flush()

@@ -183,7 +183,9 @@ async def search_admin_users(
         return
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
-        await message.answer("Отправь поисковый запрос или вернись назад кнопкой под сообщением.")
+        await message.answer(
+            "Отправь запрос для поиска или вернись назад кнопкой под сообщением."
+        )
         return
 
     try:
@@ -197,7 +199,7 @@ async def search_admin_users(
         return
 
     if not users:
-        await message.answer("Ничего не нашёл. Попробуй Telegram ID, username или имя.")
+        await message.answer("Ничего не нашёл. Попробуй идентификатор Telegram, имя пользователя или имя.")
         return
 
     state_data = await state.get_data()
@@ -496,7 +498,7 @@ async def send_admin_feedback_reply(
         return
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
-        await message.answer("Отправь текст ответа или нажми «Отмена» под сообщением.")
+        await message.answer("Напиши текст ответа или нажми «Отмена» под сообщением.")
         return
 
     state_data = await state.get_data()
@@ -647,7 +649,7 @@ async def _render_admin_page(
 def _build_dashboard_text(dashboard: AdminDashboardData) -> str:
     return "\n".join(
         [
-            "🛠 Панель администратора",
+            "🛠 Админка",
             "",
             f"Пользователей: {dashboard.total_users_count}",
             f"Администраторов: {dashboard.admin_users_count}",
@@ -665,7 +667,7 @@ def _build_search_prompt_text() -> str:
         [
             "🔍 Поиск пользователя",
             "",
-            "Отправь Telegram ID, username или имя.",
+            "Отправь идентификатор Telegram, имя пользователя или имя.",
         ]
     )
 
@@ -701,9 +703,9 @@ def _build_user_card_text(user_card: AdminUserCard) -> str:
         [
             "👤 Карточка пользователя",
             "",
-            f"ID пользователя: {user_card.id}",
-            f"Telegram ID: {user_card.telegram_id}",
-            f"Username: {html.quote(username)}",
+            f"Внутренний номер: {user_card.id}",
+            f"Идентификатор Telegram: {user_card.telegram_id}",
+            f"Имя пользователя: {html.quote(username)}",
             f"Имя: {html.quote(full_name)}",
             f"Администратор: {admin_status}",
             f"Заблокирован: {blocked_status}",
@@ -712,7 +714,7 @@ def _build_user_card_text(user_card: AdminUserCard) -> str:
             f"Активных привычек: {user_card.active_habits_count}",
             f"В архиве: {user_card.archived_habits_count}",
             f"Удалено: {user_card.deleted_habits_count}",
-            f"Последняя активность: {last_completed_text}",
+            f"Последнее выполнение: {last_completed_text}",
         ]
     )
 
@@ -732,11 +734,7 @@ def _build_habit_list_text(habits_page: AdminHabitListPage) -> str:
     ]
 
     if habits_page.list_type != "global_deleted":
-        lines.extend(
-            [
-                f"Пользователь: {html.quote(habits_page.owner_display_name)}",
-            ]
-        )
+        lines.append(f"Пользователь: {html.quote(habits_page.owner_display_name)}")
 
     if not habits_page.items:
         lines.extend(
@@ -781,12 +779,12 @@ def _build_feedback_card_text(feedback_card: FeedbackCard) -> str:
         else "ответа пока не было"
     )
     lines = [
-        "💬 Сообщение обратной связи",
+        "💬 Сообщение",
         "",
-        f"Сообщение №{feedback_card.id}",
-        f"ID пользователя: {feedback_card.user_id}",
-        f"Telegram ID: {feedback_card.telegram_id}",
-        f"Username: {html.quote(username)}",
+        f"Номер сообщения: {feedback_card.id}",
+        f"Внутренний номер пользователя: {feedback_card.user_id}",
+        f"Идентификатор Telegram: {feedback_card.telegram_id}",
+        f"Имя пользователя: {html.quote(username)}",
         f"Имя: {html.quote(full_name)}",
         f"Получено: {created_at}",
         f"Статус: {status}",
@@ -823,7 +821,7 @@ def _build_revoke_confirmation_text(user_card: AdminUserCard) -> str:
         [
             f"↩️ Снять права администратора у {title}?",
             "",
-            "Доступ к панели администратора пропадёт сразу после подтверждения.",
+            "Доступ к админке пропадёт сразу после подтверждения.",
         ]
     )
 

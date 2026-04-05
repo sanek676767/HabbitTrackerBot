@@ -41,7 +41,7 @@ async def start_edit_habit(
 
     user = await user_service.get_by_telegram_id(callback.from_user.id)
     if user is None:
-        await callback.answer("Сначала отправьте /start.", show_alert=True)
+        await callback.answer("Сначала отправь /start.", show_alert=True)
         return
 
     try:
@@ -84,7 +84,7 @@ async def cancel_edit_habit(
 
     user = await user_service.get_by_telegram_id(callback.from_user.id)
     if user is None:
-        await callback.answer("Сначала отправьте /start.", show_alert=True)
+        await callback.answer("Сначала отправь /start.", show_alert=True)
         return
 
     try:
@@ -104,6 +104,7 @@ async def cancel_edit_habit(
             callback_data.source,
             is_completed_today=habit_card.is_completed_today,
             is_active=habit_card.is_active,
+            is_due_today=habit_card.is_due_today,
         ),
     )
     await callback.answer("Редактирование отменено.")
@@ -123,11 +124,11 @@ async def save_habit_title(
     user = await user_service.get_by_telegram_id(message.from_user.id)
     if user is None:
         await state.clear()
-        await message.answer("Сначала отправьте /start.")
+        await message.answer("Сначала отправь /start.")
         return
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
-        await message.answer("Отправь новое название или нажми «⬅️ Отмена».")
+        await message.answer("Напиши новое название или нажми «Отмена».")
         return
 
     state_data = await state.get_data()
@@ -167,6 +168,7 @@ async def save_habit_title(
                     source,
                     is_completed_today=habit_card.is_completed_today,
                     is_active=habit_card.is_active,
+                    is_due_today=habit_card.is_due_today,
                 ),
             )
         except TelegramBadRequest:
@@ -177,16 +179,17 @@ async def save_habit_title(
                     source,
                     is_completed_today=habit_card.is_completed_today,
                     is_active=habit_card.is_active,
+                    is_due_today=habit_card.is_due_today,
                 ),
             )
 
-    await message.answer(f"Название привычки обновлено: «{html.quote(habit_card.title)}».")
+    await message.answer(f"Название обновлено: «{html.quote(habit_card.title)}».")
 
 
 def _build_edit_prompt_text(title: str) -> str:
     return "\n".join(
         [
-            "✏️ Редактирование привычки",
+            "✏️ Изменение названия",
             "",
             f"Сейчас: {html.quote(title)}",
             "Напиши новое название.",
@@ -195,17 +198,24 @@ def _build_edit_prompt_text(title: str) -> str:
 
 
 def _build_habit_card_text(habit_card: HabitCard) -> str:
-    today_status = "Выполнена" if habit_card.is_completed_today else "Не выполнена"
-    active_status = "Активная" if habit_card.is_active else "В архиве"
+    if habit_card.is_completed_today:
+        today_status = "выполнена"
+    elif habit_card.is_due_today:
+        today_status = "ждёт отметку"
+    else:
+        today_status = "на сегодня не запланирована"
+
     reminder_status = (
         habit_card.reminder_time.strftime("%H:%M")
         if habit_card.reminder_enabled and habit_card.reminder_time is not None
-        else "Выключено"
+        else "выключено"
     )
+    active_status = "активна" if habit_card.is_active else "в архиве"
     return "\n".join(
         [
             f"📌 {html.quote(habit_card.title)}",
             "",
+            f"Частота: {habit_card.frequency_text}",
             f"Сегодня: {today_status}",
             f"Текущая серия: {habit_card.current_streak}",
             f"Лучшая серия: {habit_card.best_streak}",

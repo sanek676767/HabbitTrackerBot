@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 
@@ -19,15 +19,20 @@ class DummySession:
 
 
 def make_habit(**overrides: object) -> SimpleNamespace:
+    created_at = datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc)
     defaults = {
         "id": 1,
         "user_id": 1,
         "title": "Read 20 pages",
+        "frequency_type": "daily",
+        "frequency_interval": None,
+        "week_days_mask": None,
+        "start_date": date(2026, 4, 4),
         "is_active": True,
         "is_deleted": False,
         "reminder_enabled": False,
         "reminder_time": None,
-        "created_at": datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc),
+        "created_at": created_at,
         "last_completed_at": None,
         "user": None,
     }

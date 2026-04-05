@@ -1,3 +1,11 @@
+from app.bot.keyboards.create_habit import (
+    get_create_habit_cancel_keyboard,
+    get_create_habit_confirm_keyboard,
+    get_create_habit_frequency_keyboard,
+    get_create_habit_reminder_keyboard,
+    get_create_habit_text_input_keyboard,
+    get_create_habit_weekdays_keyboard,
+)
 from app.bot.keyboards.admin import (
     get_admin_dashboard_keyboard,
     get_admin_feedback_card_keyboard,
@@ -31,7 +39,6 @@ from app.bot.keyboards.main_menu import (
     PROFILE_BUTTON,
     HELP_BUTTON,
     TODAY_BUTTON,
-    get_create_habit_keyboard,
     get_main_menu_keyboard,
 )
 from app.bot.keyboards.progress import (
@@ -49,6 +56,12 @@ __all__ = [
     "PROGRESS_BUTTON",
     "PROFILE_BUTTON",
     "HELP_BUTTON",
+    "get_create_habit_cancel_keyboard",
+    "get_create_habit_confirm_keyboard",
+    "get_create_habit_frequency_keyboard",
+    "get_create_habit_reminder_keyboard",
+    "get_create_habit_text_input_keyboard",
+    "get_create_habit_weekdays_keyboard",
     "get_admin_dashboard_keyboard",
     "get_admin_feedback_card_keyboard",
     "get_admin_feedback_list_keyboard",
@@ -60,7 +73,6 @@ __all__ = [
     "get_admin_user_card_keyboard",
     "get_admin_users_keyboard",
     "get_feedback_keyboard",
-    "get_create_habit_keyboard",
     "get_main_menu_keyboard",
     "get_habits_list_keyboard",
     "get_habit_card_keyboard",

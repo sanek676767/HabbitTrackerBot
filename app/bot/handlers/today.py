@@ -22,7 +22,7 @@ async def show_today_habits(
 
     user = await user_service.get_by_telegram_id(message.from_user.id)
     if user is None:
-        await message.answer("Сначала отправьте /start.")
+        await message.answer("Сначала отправь /start.")
         return
 
     text, reply_markup = await _build_today_screen_text(user.id, habit_service)
@@ -41,7 +41,7 @@ async def open_today_from_callback(
 
     user = await user_service.get_by_telegram_id(callback.from_user.id)
     if user is None:
-        await callback.answer("Сначала отправьте /start.", show_alert=True)
+        await callback.answer("Сначала отправь /start.", show_alert=True)
         return
 
     text, reply_markup = await _build_today_screen_text(user.id, habit_service)
@@ -55,10 +55,10 @@ async def _build_today_screen_text(
 ) -> tuple[str, InlineKeyboardMarkup | None]:
     habits = await habit_service.get_today_habits(user_id)
     if not habits:
-        return ("У тебя пока нет активных привычек на сегодня.", None)
+        return ("Сегодня по расписанию привычек нет.", None)
 
     return (
-        "🔥 Сегодня\nВыбери привычку, чтобы открыть карточку.",
+        "🔥 Сегодня\n\nЗдесь только те привычки, которые запланированы на сегодня.",
         get_habits_list_keyboard(
             habits,
             HabitListSource.TODAY.value,
