@@ -68,7 +68,9 @@ async def start_feedback(
                 contact_line,
             ]
         ),
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_main_menu_keyboard(
+            show_admin_button=UserService.should_show_admin_entry(user)
+        ),
     )
 
 
@@ -79,13 +81,19 @@ async def start_feedback(
 async def cancel_feedback(
     callback: CallbackQuery,
     state: FSMContext,
+    user_service: UserService,
 ) -> None:
     await state.clear()
     if callback.message is not None:
+        show_admin_button = False
+        if callback.from_user is not None:
+            show_admin_button = await user_service.should_show_admin_entry_by_telegram_id(
+                callback.from_user.id
+            )
         await callback.message.edit_text("Сообщение не отправлено.")
         await callback.message.answer(
             "Если захочешь, можно вернуться к этому позже.",
-            reply_markup=get_main_menu_keyboard(),
+            reply_markup=get_main_menu_keyboard(show_admin_button=show_admin_button),
         )
     await callback.answer()
 
@@ -111,7 +119,10 @@ async def submit_feedback(
     user = await user_service.get_by_telegram_id(message.from_user.id)
     if user is None:
         await state.clear()
-        await message.answer("Сначала отправь /start.", reply_markup=get_main_menu_keyboard())
+        await message.answer(
+            "Сначала отправь /start.",
+            reply_markup=get_main_menu_keyboard(),
+        )
         return
 
     feedback_text = message.text or ""
@@ -130,7 +141,9 @@ async def submit_feedback(
                     contact_line,
                 ]
             ),
-            reply_markup=get_main_menu_keyboard(),
+            reply_markup=get_main_menu_keyboard(
+                show_admin_button=UserService.should_show_admin_entry(user)
+            ),
         )
         return
 
@@ -161,5 +174,7 @@ async def submit_feedback(
     )
     await message.answer(
         confirmation_text,
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_main_menu_keyboard(
+            show_admin_button=UserService.should_show_admin_entry(user)
+        ),
     )

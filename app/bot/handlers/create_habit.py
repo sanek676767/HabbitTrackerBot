@@ -92,11 +92,17 @@ async def cancel_create_habit(
 async def cancel_create_habit_from_reply_button(
     message: Message,
     state: FSMContext,
+    user_service: UserService,
 ) -> None:
     await state.clear()
+    show_admin_button = False
+    if message.from_user is not None:
+        show_admin_button = await user_service.should_show_admin_entry_by_telegram_id(
+            message.from_user.id
+        )
     await message.answer(
         "Создание привычки остановлено.",
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_main_menu_keyboard(show_admin_button=show_admin_button),
     )
 
 
@@ -112,9 +118,12 @@ async def save_habit_title(
         return
 
     if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
+        show_admin_button = await user_service.should_show_admin_entry_by_telegram_id(
+            message.from_user.id
+        )
         await message.answer(
             "Сначала напиши название привычки или нажми «Назад».",
-            reply_markup=get_main_menu_keyboard(),
+            reply_markup=get_main_menu_keyboard(show_admin_button=show_admin_button),
         )
         return
 

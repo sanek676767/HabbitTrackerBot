@@ -33,6 +33,7 @@ from app.bot.keyboards.habits import (
 )
 from app.bot.keyboards.main_menu import (
     ADD_HABIT_BUTTON,
+    ADMIN_BUTTON,
     ALL_MAIN_MENU_BUTTONS,
     BACK_TO_MENU_BUTTON,
     FEEDBACK_BUTTON,
@@ -50,6 +51,7 @@ from app.bot.keyboards.progress import (
 
 __all__ = [
     "ADD_HABIT_BUTTON",
+    "ADMIN_BUTTON",
     "ALL_MAIN_MENU_BUTTONS",
     "BACK_TO_MENU_BUTTON",
     "FEEDBACK_BUTTON",

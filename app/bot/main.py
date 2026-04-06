@@ -8,6 +8,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import BotCommand
 
 from app.bot.handlers import routers
+from app.bot.middlewares.blocked_user import BlockedUserMiddleware
 from app.bot.middlewares.db_session import DbSessionMiddleware
 from app.bot.reminder_runner import run_inline_reminder_loop
 from app.core.config import settings
@@ -42,6 +43,8 @@ async def main() -> None:
     dispatcher = Dispatcher()
     dispatcher.message.middleware(DbSessionMiddleware())
     dispatcher.callback_query.middleware(DbSessionMiddleware())
+    dispatcher.message.middleware(BlockedUserMiddleware())
+    dispatcher.callback_query.middleware(BlockedUserMiddleware())
 
     for router in routers:
         dispatcher.include_router(router)

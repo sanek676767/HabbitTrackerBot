@@ -29,7 +29,12 @@ async def start_handler(message: Message, user_service: UserService) -> None:
         else _build_returning_user_text(greeting_name)
     )
 
-    await message.answer(text, reply_markup=get_main_menu_keyboard())
+    await message.answer(
+        text,
+        reply_markup=get_main_menu_keyboard(
+            show_admin_button=UserService.should_show_admin_entry(user)
+        ),
+    )
 
 
 def _build_onboarding_text(greeting_name: str) -> str:

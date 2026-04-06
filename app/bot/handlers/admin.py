@@ -16,6 +16,7 @@ from app.bot.callbacks import (
     AdminUserCallback,
 )
 from app.bot.keyboards import (
+    ADMIN_BUTTON,
     ALL_MAIN_MENU_BUTTONS,
     get_admin_action_log_card_keyboard,
     get_admin_action_log_list_keyboard,
@@ -76,6 +77,7 @@ class AdminStates(StatesGroup):
 
 
 @router.message(Command("admin"))
+@router.message(F.text == ADMIN_BUTTON)
 async def open_admin_dashboard(
     message: Message,
     state: FSMContext,

@@ -67,6 +67,10 @@ class UserService:
     async def get_by_telegram_id(self, telegram_id: int) -> User | None:
         return await self._user_repository.get_by_telegram_id(telegram_id)
 
+    async def should_show_admin_entry_by_telegram_id(self, telegram_id: int) -> bool:
+        user = await self.get_by_telegram_id(telegram_id)
+        return self.should_show_admin_entry(user)
+
     async def set_utc_offset_from_local_time(
         self,
         user_id: int,
@@ -107,6 +111,14 @@ class UserService:
         absolute_minutes = abs(utc_offset_minutes)
         hours, minutes = divmod(absolute_minutes, 60)
         return f"{sign}{hours:02d}:{minutes:02d}"
+
+    @staticmethod
+    def can_use_bot(user: User | None) -> bool:
+        return user is None or not user.is_blocked
+
+    @staticmethod
+    def should_show_admin_entry(user: User | None) -> bool:
+        return bool(user is not None and user.is_admin and not user.is_blocked)
 
     @staticmethod
     def _calculate_utc_offset_minutes(local_time: time, utc_time: time) -> int:

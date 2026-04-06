@@ -3,6 +3,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 from app.bot.keyboards import HELP_BUTTON, get_main_menu_keyboard
+from app.services.user_service import UserService
 
 
 router = Router(name="help")
@@ -10,10 +11,16 @@ router = Router(name="help")
 
 @router.message(Command("help"))
 @router.message(F.text == HELP_BUTTON)
-async def help_handler(message: Message) -> None:
+async def help_handler(message: Message, user_service: UserService) -> None:
+    show_admin_button = False
+    if message.from_user is not None:
+        show_admin_button = await user_service.should_show_admin_entry_by_telegram_id(
+            message.from_user.id
+        )
+
     await message.answer(
         _build_help_text(),
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_main_menu_keyboard(show_admin_button=show_admin_button),
     )
 
 

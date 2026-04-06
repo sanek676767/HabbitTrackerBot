@@ -45,5 +45,7 @@ async def profile_handler(
                 f"Отмечено сегодня: {completed_today_count}",
             ]
         ),
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_main_menu_keyboard(
+            show_admin_button=UserService.should_show_admin_entry(user)
+        ),
     )
