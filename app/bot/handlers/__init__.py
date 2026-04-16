@@ -2,6 +2,7 @@ from app.bot.handlers.admin import router as admin_router
 from app.bot.handlers.create_habit import router as create_habit_router
 from app.bot.handlers.edit_habit import router as edit_habit_router
 from app.bot.handlers.feedback import router as feedback_router
+from app.bot.handlers.habit_goals import router as habit_goals_router
 from app.bot.handlers.habits import router as habits_router
 from app.bot.handlers.help import router as help_router
 from app.bot.handlers.progress import router as progress_router
@@ -19,6 +20,7 @@ routers = (
     progress_router,
     create_habit_router,
     edit_habit_router,
+    habit_goals_router,
     reminders_router,
     habits_router,
     today_router,

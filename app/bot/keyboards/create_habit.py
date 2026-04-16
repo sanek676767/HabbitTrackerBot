@@ -153,6 +153,64 @@ def get_create_habit_reminder_keyboard(*, reminder_enabled: bool) -> InlineKeybo
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def get_create_habit_goal_keyboard(*, goal_configured: bool) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text="🎯 По выполнению",
+                callback_data=CreateHabitCallback(action="goal_completions").pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔥 По серии",
+                callback_data=CreateHabitCallback(action="goal_streak").pack(),
+            )
+        ],
+    ]
+
+    if goal_configured:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🗑 Убрать цель",
+                    callback_data=CreateHabitCallback(action="goal_clear").pack(),
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="✅ Дальше",
+                    callback_data=CreateHabitCallback(action="goal_next").pack(),
+                )
+            ]
+        )
+    else:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="Без цели",
+                    callback_data=CreateHabitCallback(action="goal_skip").pack(),
+                )
+            ]
+        )
+
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ К напоминанию",
+                callback_data=CreateHabitCallback(action="to_reminder").pack(),
+            ),
+            InlineKeyboardButton(
+                text="Отмена",
+                callback_data=CreateHabitCallback(action="cancel").pack(),
+            ),
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def get_create_habit_text_input_keyboard(*, back_action: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -195,6 +253,12 @@ def get_create_habit_confirm_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="⏰ Изменить напоминание",
                     callback_data=CreateHabitCallback(action="edit_reminder").pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎯 Изменить цель",
+                    callback_data=CreateHabitCallback(action="edit_goal").pack(),
                 )
             ],
             [

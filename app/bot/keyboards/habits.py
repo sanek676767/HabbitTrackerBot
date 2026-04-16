@@ -7,8 +7,10 @@ from app.bot.callbacks import (
     HabitDeleteCallback,
     HabitDeleteConfirmCallback,
     HabitDoneCallback,
+    HabitEditActionCallback,
     HabitEditCallback,
-    HabitEditCancelCallback,
+    HabitGoalActionCallback,
+    HabitGoalMenuCallback,
     HabitListCallback,
     HabitListSource,
     HabitReminderCancelCallback,
@@ -20,6 +22,7 @@ from app.bot.callbacks import (
     HabitViewCallback,
 )
 from app.services.habit_service import HabitListItem
+from app.services.habit_schedule_service import WEEKDAY_BUTTON_LABELS
 
 
 def get_habits_list_keyboard(
@@ -98,15 +101,15 @@ def get_habit_card_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="⏰ Напоминание",
-                callback_data=HabitReminderMenuCallback(
+                text="🎯 Цель",
+                callback_data=HabitGoalMenuCallback(
                     habit_id=habit_id,
                     source=source,
                 ).pack(),
             ),
             InlineKeyboardButton(
-                text="✏️ Изменить",
-                callback_data=HabitEditCallback(
+                text="⏰ Напоминание",
+                callback_data=HabitReminderMenuCallback(
                     habit_id=habit_id,
                     source=source,
                 ).pack(),
@@ -116,12 +119,19 @@ def get_habit_card_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
+                text="✏️ Редактировать",
+                callback_data=HabitEditCallback(
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            ),
+            InlineKeyboardButton(
                 text="📊 Статистика",
                 callback_data=HabitStatsCallback(
                     habit_id=habit_id,
                     source=source,
                 ).pack(),
-            )
+            ),
         ]
     )
     rows.append(
@@ -207,8 +217,249 @@ def get_habit_edit_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Отмена",
-                    callback_data=HabitEditCancelCallback(
+                    text="✏️ Изменить название",
+                    callback_data=HabitEditActionCallback(
+                        action="title",
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗓 Изменить частоту",
+                    callback_data=HabitEditActionCallback(
+                        action="frequency",
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⏰ Изменить напоминание",
+                    callback_data=HabitReminderMenuCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎯 Изменить цель",
+                    callback_data=HabitGoalMenuCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К привычке",
+                    callback_data=HabitEditActionCallback(
+                        action="back",
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+        ]
+    )
+
+
+def get_habit_edit_input_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К привычке",
+                    callback_data=HabitEditActionCallback(
+                        action="back",
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ]
+        ]
+    )
+
+
+def get_habit_edit_frequency_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Каждый день",
+                    callback_data=HabitEditActionCallback(
+                        action="freq_daily",
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Через день",
+                    callback_data=HabitEditActionCallback(
+                        action="freq_interval",
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="По дням недели",
+                    callback_data=HabitEditActionCallback(
+                        action="freq_weekdays",
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data=HabitEditActionCallback(
+                        action="back",
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
+        ]
+    )
+
+
+def get_habit_edit_weekdays_keyboard(
+    selected_days: Sequence[int],
+    habit_id: int,
+    source: str,
+) -> InlineKeyboardMarkup:
+    selected_days_set = set(selected_days)
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅ ' if index in selected_days_set else ''}{WEEKDAY_BUTTON_LABELS[index]}",
+                callback_data=HabitEditActionCallback(
+                    action=f"weekday_{index}",
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            )
+            for index in range(0, 3)
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"{'✅ ' if index in selected_days_set else ''}{WEEKDAY_BUTTON_LABELS[index]}",
+                callback_data=HabitEditActionCallback(
+                    action=f"weekday_{index}",
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            )
+            for index in range(3, 6)
+        ],
+        [
+            InlineKeyboardButton(
+                text=f"{'✅ ' if 6 in selected_days_set else ''}{WEEKDAY_BUTTON_LABELS[6]}",
+                callback_data=HabitEditActionCallback(
+                    action="weekday_6",
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="Готово",
+                callback_data=HabitEditActionCallback(
+                    action="weekdays_done",
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="⬅️ К частоте",
+                callback_data=HabitEditActionCallback(
+                    action="back_frequency",
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            )
+        ],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_habit_goal_menu_keyboard(
+    habit_id: int,
+    source: str,
+    *,
+    has_goal: bool,
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text="🎯 По выполнениям",
+                callback_data=HabitGoalActionCallback(
+                    action="completions",
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔥 По серии",
+                callback_data=HabitGoalActionCallback(
+                    action="streak",
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            )
+        ],
+    ]
+
+    if has_goal:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🗑 Убрать цель",
+                    callback_data=HabitGoalActionCallback(
+                        action="clear",
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ]
+        )
+
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="⬅️ К привычке",
+                callback_data=HabitGoalActionCallback(
+                    action="back",
+                    habit_id=habit_id,
+                    source=source,
+                ).pack(),
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_habit_goal_input_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data=HabitGoalActionCallback(
+                        action="back_to_menu",
                         habit_id=habit_id,
                         source=source,
                     ).pack(),

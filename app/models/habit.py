@@ -13,6 +13,11 @@ class HabitFrequencyType(str, Enum):
     WEEKDAYS = "weekdays"
 
 
+class HabitGoalType(str, Enum):
+    COMPLETIONS = "completions"
+    STREAK = "streak"
+
+
 class Habit(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
     __tablename__ = "habits"
 
@@ -70,6 +75,18 @@ class Habit(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
     )
     reminder_time: Mapped[time | None] = mapped_column(
         Time(),
+        nullable=True,
+    )
+    goal_type: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+    )
+    goal_target_value: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    goal_achieved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
         nullable=True,
     )
 

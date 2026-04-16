@@ -14,11 +14,13 @@ from app.bot.keyboards import (
     get_create_habit_cancel_keyboard,
     get_create_habit_confirm_keyboard,
     get_create_habit_frequency_keyboard,
+    get_create_habit_goal_keyboard,
     get_create_habit_reminder_keyboard,
     get_create_habit_text_input_keyboard,
     get_create_habit_weekdays_keyboard,
     get_main_menu_keyboard,
 )
+from app.services.habit_goal_service import HabitGoalService
 from app.services.habit_schedule_service import HabitScheduleService
 from app.services.habit_service import (
     HabitReminderValidationError,
@@ -38,6 +40,8 @@ class CreateHabitStates(StatesGroup):
     choosing_reminder = State()
     waiting_for_current_time = State()
     waiting_for_reminder_time = State()
+    choosing_goal = State()
+    waiting_for_goal_value = State()
     confirming = State()
 
 
@@ -70,6 +74,9 @@ async def start_create_habit(
         start_date=date.today().isoformat(),
         reminder_enabled=False,
         reminder_time=None,
+        goal_type=None,
+        goal_target_value=None,
+        pending_goal_type=None,
         title_edit_mode="initial",
         chat_id=prompt_message.chat.id,
         prompt_chat_id=prompt_message.chat.id,
@@ -192,9 +199,12 @@ async def handle_frequency_choice(
             week_days_mask=schedule.week_days_mask,
         )
         await state.set_state(CreateHabitStates.choosing_reminder)
+        reminder_enabled = bool((await state.get_data()).get("reminder_enabled"))
         await callback.message.edit_text(
             _build_reminder_prompt_text(await state.get_data(), habit_service),
-            reply_markup=get_create_habit_reminder_keyboard(reminder_enabled=False),
+            reply_markup=get_create_habit_reminder_keyboard(
+                reminder_enabled=reminder_enabled
+            ),
         )
         await callback.answer()
         return
@@ -211,9 +221,12 @@ async def handle_frequency_choice(
             week_days_mask=schedule.week_days_mask,
         )
         await state.set_state(CreateHabitStates.choosing_reminder)
+        reminder_enabled = bool((await state.get_data()).get("reminder_enabled"))
         await callback.message.edit_text(
             _build_reminder_prompt_text(await state.get_data(), habit_service),
-            reply_markup=get_create_habit_reminder_keyboard(reminder_enabled=False),
+            reply_markup=get_create_habit_reminder_keyboard(
+                reminder_enabled=reminder_enabled
+            ),
         )
         await callback.answer()
         return
@@ -344,10 +357,10 @@ async def handle_reminder_choice(
 
     if callback_data.action == "reminder_skip":
         await state.update_data(reminder_enabled=False, reminder_time=None)
-        await state.set_state(CreateHabitStates.confirming)
+        await state.set_state(CreateHabitStates.choosing_goal)
         await callback.message.edit_text(
-            _build_confirmation_text(await state.get_data(), habit_service),
-            reply_markup=get_create_habit_confirm_keyboard(),
+            _build_goal_prompt_text(await state.get_data(), habit_service),
+            reply_markup=get_create_habit_goal_keyboard(goal_configured=False),
         )
         await callback.answer()
         return
@@ -356,10 +369,12 @@ async def handle_reminder_choice(
         if not state_data.get("reminder_enabled"):
             await callback.answer("Напоминание пока не настроено.", show_alert=True)
             return
-        await state.set_state(CreateHabitStates.confirming)
+        await state.set_state(CreateHabitStates.choosing_goal)
         await callback.message.edit_text(
-            _build_confirmation_text(await state.get_data(), habit_service),
-            reply_markup=get_create_habit_confirm_keyboard(),
+            _build_goal_prompt_text(await state.get_data(), habit_service),
+            reply_markup=get_create_habit_goal_keyboard(
+                goal_configured=bool((await state.get_data()).get("goal_type"))
+            ),
         )
         await callback.answer()
         return
@@ -486,14 +501,177 @@ async def save_reminder_time_for_create_flow(
         reminder_enabled=True,
         reminder_time=reminder_time.strftime("%H:%M"),
     )
-    await state.set_state(CreateHabitStates.confirming)
+    await state.set_state(CreateHabitStates.choosing_goal)
     await _render_flow_message(
         bot=message.bot,
         state=state,
-        text=_build_confirmation_text(await state.get_data(), habit_service),
-        reply_markup=get_create_habit_confirm_keyboard(),
+        text=_build_goal_prompt_text(await state.get_data(), habit_service),
+        reply_markup=get_create_habit_goal_keyboard(
+            goal_configured=bool((await state.get_data()).get("goal_type"))
+        ),
     )
     await message.answer(f"Напоминание поставил на {reminder_time.strftime('%H:%M')}.")
+
+
+@router.callback_query(CreateHabitStates.choosing_goal, CreateHabitCallback.filter())
+async def handle_goal_choice(
+    callback: CallbackQuery,
+    callback_data: CreateHabitCallback,
+    state: FSMContext,
+    habit_service: HabitService,
+) -> None:
+    if callback.message is None:
+        await callback.answer()
+        return
+
+    state_data = await state.get_data()
+
+    if callback_data.action == "to_reminder":
+        await state.set_state(CreateHabitStates.choosing_reminder)
+        await callback.message.edit_text(
+            _build_reminder_prompt_text(state_data, habit_service),
+            reply_markup=get_create_habit_reminder_keyboard(
+                reminder_enabled=bool(state_data.get("reminder_enabled"))
+            ),
+        )
+        await callback.answer()
+        return
+
+    if callback_data.action == "goal_skip":
+        await state.update_data(
+            goal_type=None,
+            goal_target_value=None,
+            pending_goal_type=None,
+        )
+        await state.set_state(CreateHabitStates.confirming)
+        await callback.message.edit_text(
+            _build_confirmation_text(await state.get_data(), habit_service),
+            reply_markup=get_create_habit_confirm_keyboard(),
+        )
+        await callback.answer()
+        return
+
+    if callback_data.action == "goal_clear":
+        await state.update_data(
+            goal_type=None,
+            goal_target_value=None,
+            pending_goal_type=None,
+        )
+        updated_state = await state.get_data()
+        await callback.message.edit_text(
+            _build_goal_prompt_text(updated_state, habit_service),
+            reply_markup=get_create_habit_goal_keyboard(goal_configured=False),
+        )
+        await callback.answer("Цель убрал.")
+        return
+
+    if callback_data.action == "goal_next":
+        await state.set_state(CreateHabitStates.confirming)
+        await callback.message.edit_text(
+            _build_confirmation_text(await state.get_data(), habit_service),
+            reply_markup=get_create_habit_confirm_keyboard(),
+        )
+        await callback.answer()
+        return
+
+    if callback_data.action in {"goal_completions", "goal_streak"}:
+        goal_type = (
+            HabitGoalService.COMPLETIONS
+            if callback_data.action == "goal_completions"
+            else HabitGoalService.STREAK
+        )
+        await state.set_state(CreateHabitStates.waiting_for_goal_value)
+        await state.update_data(pending_goal_type=goal_type)
+        await callback.message.edit_text(
+            _build_goal_value_prompt_text(
+                goal_type,
+                current_value=state_data.get("goal_target_value")
+                if state_data.get("goal_type") == goal_type
+                else None,
+            ),
+            reply_markup=get_create_habit_text_input_keyboard(back_action="to_goal"),
+        )
+        await callback.answer()
+        return
+
+    await callback.answer()
+
+
+@router.callback_query(CreateHabitStates.waiting_for_goal_value, CreateHabitCallback.filter())
+async def handle_goal_value_callbacks(
+    callback: CallbackQuery,
+    callback_data: CreateHabitCallback,
+    state: FSMContext,
+    habit_service: HabitService,
+) -> None:
+    if callback.message is None:
+        await callback.answer()
+        return
+
+    if callback_data.action != "to_goal":
+        await callback.answer()
+        return
+
+    await state.set_state(CreateHabitStates.choosing_goal)
+    state_data = await state.get_data()
+    await callback.message.edit_text(
+        _build_goal_prompt_text(state_data, habit_service),
+        reply_markup=get_create_habit_goal_keyboard(
+            goal_configured=bool(state_data.get("goal_type"))
+        ),
+    )
+    await callback.answer()
+
+
+@router.message(CreateHabitStates.waiting_for_goal_value)
+async def save_goal_value_for_create_flow(
+    message: Message,
+    state: FSMContext,
+    habit_service: HabitService,
+) -> None:
+    if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
+        await message.answer("Пришли число цели или нажми «Назад».")
+        return
+
+    state_data = await state.get_data()
+    pending_goal_type = state_data.get("pending_goal_type")
+    if not isinstance(pending_goal_type, str):
+        await state.clear()
+        await message.answer("Не получилось продолжить настройку цели. Начни ещё раз.")
+        return
+
+    try:
+        goal_target_value = int((message.text or "").strip())
+    except ValueError:
+        await message.answer("Напиши цель числом.")
+        return
+
+    try:
+        goal = habit_service.build_goal_config(
+            goal_type=pending_goal_type,
+            goal_target_value=goal_target_value,
+        )
+    except HabitValidationError as error:
+        await message.answer(str(error))
+        return
+
+    if goal is None:
+        await message.answer("Не удалось определить цель привычки.")
+        return
+
+    await state.update_data(
+        goal_type=goal.goal_type,
+        goal_target_value=goal.target_value,
+        pending_goal_type=None,
+    )
+    await state.set_state(CreateHabitStates.choosing_goal)
+    await _render_flow_message(
+        bot=message.bot,
+        state=state,
+        text=_build_goal_prompt_text(await state.get_data(), habit_service),
+        reply_markup=get_create_habit_goal_keyboard(goal_configured=True),
+    )
+    await message.answer("Цель добавил.")
 
 
 @router.callback_query(CreateHabitStates.confirming, CreateHabitCallback.filter())
@@ -540,6 +718,17 @@ async def handle_create_confirmation(
         await callback.answer()
         return
 
+    if callback_data.action == "edit_goal":
+        await state.set_state(CreateHabitStates.choosing_goal)
+        await callback.message.edit_text(
+            _build_goal_prompt_text(state_data, habit_service),
+            reply_markup=get_create_habit_goal_keyboard(
+                goal_configured=bool(state_data.get("goal_type"))
+            ),
+        )
+        await callback.answer()
+        return
+
     if callback_data.action != "confirm":
         await callback.answer()
         return
@@ -552,6 +741,7 @@ async def handle_create_confirmation(
 
     try:
         schedule = _build_schedule_from_state(state_data, habit_service)
+        goal = _build_goal_from_state(state_data, habit_service)
         reminder_time = (
             habit_service.parse_reminder_time(state_data.get("reminder_time"))
             if state_data.get("reminder_enabled") and state_data.get("reminder_time")
@@ -566,6 +756,8 @@ async def handle_create_confirmation(
             reminder_enabled=bool(state_data.get("reminder_enabled")),
             reminder_time=reminder_time,
             start_date=schedule.start_date,
+            goal_type=goal.goal_type if goal is not None else None,
+            goal_target_value=goal.target_value if goal is not None else None,
         )
     except (HabitValidationError, HabitReminderValidationError) as error:
         await callback.answer(str(error), show_alert=True)
@@ -582,6 +774,7 @@ async def handle_create_confirmation(
                 if habit.reminder_time is not None
                 else None
             ),
+            goal_text=habit_service.format_goal(habit),
         )
     )
     await callback.answer("Привычка создана.")
@@ -684,11 +877,55 @@ def _build_reminder_time_prompt_text(title: str, current_time: str | None) -> st
     return "\n".join(lines)
 
 
+def _build_goal_prompt_text(state_data: dict, habit_service: HabitService) -> str:
+    schedule = _build_schedule_from_state(state_data, habit_service)
+    goal = _build_goal_from_state(state_data, habit_service)
+    goal_text = habit_service.format_goal_config(goal) or "не задана"
+    return "\n".join(
+        [
+            "🎯 Цель",
+            "",
+            f"Привычка: {html.quote(state_data.get('title') or '')}",
+            f"Частота: {habit_service.format_schedule_config(schedule)}",
+            f"Цель: {goal_text}",
+            "",
+            "Можно добавить цель или оставить привычку без цели.",
+        ]
+    )
+
+
+def _build_goal_value_prompt_text(goal_type: str, current_value: int | None) -> str:
+    if goal_type == HabitGoalService.COMPLETIONS:
+        lines = [
+            "🎯 Цель по выполнениям",
+            "",
+            "Напиши, сколько выполнений хочешь набрать.",
+            "Например: 20",
+        ]
+    else:
+        lines = [
+            "🎯 Цель по серии",
+            "",
+            "Напиши, до какой серии хочешь дойти.",
+            "Например: 14",
+        ]
+    if current_value is not None:
+        lines.extend(
+            [
+                "",
+                f"Сейчас стоит: {current_value}",
+            ]
+        )
+    return "\n".join(lines)
+
+
 def _build_confirmation_text(state_data: dict, habit_service: HabitService) -> str:
     schedule = _build_schedule_from_state(state_data, habit_service)
+    goal = _build_goal_from_state(state_data, habit_service)
     reminder_enabled = bool(state_data.get("reminder_enabled"))
     reminder_time = state_data.get("reminder_time")
     reminder_text = reminder_time if reminder_enabled and reminder_time else "выключено"
+    goal_text = habit_service.format_goal_config(goal) or "не задана"
     return "\n".join(
         [
             "✅ Подтверждение",
@@ -696,6 +933,7 @@ def _build_confirmation_text(state_data: dict, habit_service: HabitService) -> s
             f"Название: {html.quote(state_data.get('title') or '')}",
             f"Частота: {habit_service.format_schedule_config(schedule)}",
             f"Напоминание: {reminder_text}",
+            f"Цель: {goal_text}",
             "",
             "Если всё верно, нажми «Создать».",
         ]
@@ -708,6 +946,7 @@ def _build_created_text(
     frequency_text: str,
     reminder_enabled: bool,
     reminder_time: str | None,
+    goal_text: str | None,
 ) -> str:
     reminder_text = reminder_time if reminder_enabled and reminder_time else "выключено"
     return "\n".join(
@@ -716,6 +955,7 @@ def _build_created_text(
             "",
             f"Частота: {frequency_text}",
             f"Напоминание: {reminder_text}",
+            f"Цель: {goal_text or 'не задана'}",
         ]
     )
 
@@ -733,6 +973,13 @@ def _build_schedule_from_state(state_data: dict, habit_service: HabitService):
         frequency_interval=state_data.get("frequency_interval"),
         week_days_mask=state_data.get("week_days_mask"),
         start_date=_get_start_date(state_data),
+    )
+
+
+def _build_goal_from_state(state_data: dict, habit_service: HabitService):
+    return habit_service.build_goal_config(
+        goal_type=state_data.get("goal_type"),
+        goal_target_value=state_data.get("goal_target_value"),
     )
 
 

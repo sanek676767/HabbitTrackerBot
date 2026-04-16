@@ -8,6 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.habit import Habit
 from app.repositories.habit_log_repository import HabitLogRepository
 from app.repositories.habit_repository import HabitRepository
+from app.services.habit_goal_service import (
+    HabitGoalConfig,
+    HabitGoalProgress,
+    HabitGoalService,
+    HabitGoalValidationError,
+)
 from app.services.habit_schedule_service import (
     HabitScheduleConfig,
     HabitScheduleService,
@@ -78,6 +84,7 @@ class HabitCard:
     reminder_enabled: bool
     reminder_time: time | None
     frequency_text: str
+    goal: HabitGoalProgress | None
 
 
 @dataclass(slots=True)
@@ -92,6 +99,7 @@ class HabitStats:
     last_7_days_progress_text: str
     created_at: datetime
     frequency_text: str
+    goal: HabitGoalProgress | None
 
 
 @dataclass(slots=True)
@@ -103,6 +111,7 @@ class HabitProgressSummary:
     best_streak: int
     last_7_days_progress_text: str
     frequency_text: str
+    goal: HabitGoalProgress | None
 
 
 class HabitService:
@@ -127,6 +136,8 @@ class HabitService:
         reminder_enabled: bool = False,
         reminder_time: time | None = None,
         start_date: date | None = None,
+        goal_type: str | None = None,
+        goal_target_value: int | None = None,
     ) -> Habit:
         normalized_title = self.validate_title(title)
         schedule = self.build_schedule_config(
@@ -135,6 +146,11 @@ class HabitService:
             week_days_mask=week_days_mask,
             start_date=start_date,
         )
+        goal = self.build_goal_config(
+            goal_type=goal_type,
+            goal_target_value=goal_target_value,
+        )
+
         habit = await self._habit_repository.create_habit(
             user_id=user_id,
             title=normalized_title,
@@ -144,6 +160,14 @@ class HabitService:
             start_date=schedule.start_date,
             reminder_enabled=reminder_enabled,
             reminder_time=reminder_time,
+            goal_type=goal.goal_type if goal is not None else None,
+            goal_target_value=goal.target_value if goal is not None else None,
+            goal_achieved_at=None,
+        )
+        await self._sync_goal_achievement(
+            habit,
+            completion_dates=[],
+            target_date=schedule.start_date,
         )
         await self._session.commit()
         await self._session.refresh(habit)
@@ -154,6 +178,69 @@ class HabitService:
         normalized_title = self.validate_title(title)
 
         await self._habit_repository.update_title(habit, normalized_title)
+        await self._session.commit()
+        await self._session.refresh(habit)
+        return await self.get_habit_card(user_id, habit_id)
+
+    async def update_habit_schedule(
+        self,
+        user_id: int,
+        habit_id: int,
+        *,
+        frequency_type: str,
+        frequency_interval: int | None = None,
+        week_days_mask: int | None = None,
+    ) -> HabitCard:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        schedule = self.build_schedule_config(
+            frequency_type=frequency_type,
+            frequency_interval=frequency_interval,
+            week_days_mask=week_days_mask,
+            start_date=self._get_today(),
+        )
+
+        await self._habit_repository.update_schedule(
+            habit,
+            frequency_type=schedule.frequency_type,
+            frequency_interval=schedule.frequency_interval,
+            week_days_mask=schedule.week_days_mask,
+            start_date=schedule.start_date,
+        )
+        await self._sync_goal_achievement(habit, target_date=self._get_today())
+        await self._session.commit()
+        await self._session.refresh(habit)
+        return await self.get_habit_card(user_id, habit_id)
+
+    async def update_habit_goal(
+        self,
+        user_id: int,
+        habit_id: int,
+        *,
+        goal_type: str,
+        goal_target_value: int,
+    ) -> HabitCard:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        goal = self.build_goal_config(
+            goal_type=goal_type,
+            goal_target_value=goal_target_value,
+        )
+        if goal is None:
+            raise HabitValidationError("Не удалось определить цель привычки.")
+
+        await self._habit_repository.update_goal(
+            habit,
+            goal_type=goal.goal_type,
+            goal_target_value=goal.target_value,
+            goal_achieved_at=None,
+        )
+        await self._sync_goal_achievement(habit, target_date=self._get_today())
+        await self._session.commit()
+        await self._session.refresh(habit)
+        return await self.get_habit_card(user_id, habit_id)
+
+    async def clear_habit_goal(self, user_id: int, habit_id: int) -> HabitCard:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        await self._habit_repository.clear_goal(habit)
         await self._session.commit()
         await self._session.refresh(habit)
         return await self.get_habit_card(user_id, habit_id)
@@ -211,6 +298,19 @@ class HabitService:
             reminder_time=habit.reminder_time,
         )
 
+    async def get_habit_schedule_state(
+        self,
+        user_id: int,
+        habit_id: int,
+    ) -> HabitScheduleConfig:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        return HabitScheduleService.validate_schedule(
+            frequency_type=habit.frequency_type,
+            frequency_interval=habit.frequency_interval,
+            week_days_mask=habit.week_days_mask,
+            start_date=habit.start_date,
+        )
+
     async def get_active_habits(self, user_id: int) -> list[HabitListItem]:
         habits = await self._habit_repository.get_active_habits_by_user(user_id)
         return [HabitListItem(id=habit.id, title=habit.title) for habit in habits]
@@ -234,6 +334,7 @@ class HabitService:
             reminder_enabled=habit.reminder_enabled,
             reminder_time=habit.reminder_time,
             frequency_text=progress.frequency_text,
+            goal=progress.goal,
         )
 
     async def complete_habit_for_today(self, user_id: int, habit_id: int) -> HabitCard:
@@ -253,6 +354,12 @@ class HabitService:
             await self._habit_repository.update_last_completed_at(
                 habit,
                 datetime.now(timezone.utc),
+            )
+            completion_dates = await self._habit_log_repository.get_completion_dates(habit.id)
+            await self._sync_goal_achievement(
+                habit,
+                completion_dates=completion_dates,
+                target_date=today,
             )
             await self._session.commit()
         except IntegrityError:
@@ -275,6 +382,7 @@ class HabitService:
             last_7_days_progress_text=progress.last_7_days_progress_text,
             created_at=habit.created_at,
             frequency_text=progress.frequency_text,
+            goal=progress.goal,
         )
 
     async def archive_habit(self, user_id: int, habit_id: int) -> bool:
@@ -392,12 +500,36 @@ class HabitService:
             raise HabitValidationError(str(error)) from error
 
     @staticmethod
+    def build_goal_config(
+        *,
+        goal_type: str | None = None,
+        goal_target_value: int | None = None,
+    ) -> HabitGoalConfig | None:
+        try:
+            return HabitGoalService.validate_goal(
+                goal_type=goal_type,
+                goal_target_value=goal_target_value,
+            )
+        except HabitGoalValidationError as error:
+            raise HabitValidationError(str(error)) from error
+
+    @staticmethod
     def format_schedule(habit: Habit) -> str:
         return HabitScheduleService.format_schedule(habit)
 
     @staticmethod
     def format_schedule_config(schedule: HabitScheduleConfig) -> str:
         return HabitScheduleService.format_schedule_config(schedule)
+
+    @staticmethod
+    def format_goal(habit: Habit) -> str | None:
+        return HabitGoalService.format_goal(habit)
+
+    @staticmethod
+    def format_goal_config(goal: HabitGoalConfig | None) -> str | None:
+        if goal is None:
+            return None
+        return HabitGoalService.format_goal_config(goal)
 
     async def _build_progress_summary(self, habit: Habit) -> HabitProgressSummary:
         completion_dates = await self._habit_log_repository.get_completion_dates(habit.id)
@@ -424,6 +556,11 @@ class HabitService:
                 today,
             ),
             frequency_text=HabitScheduleService.format_schedule(habit),
+            goal=HabitGoalService.calculate_progress(
+                habit,
+                completion_dates,
+                today,
+            ),
         )
 
     async def _get_visible_user_habit(self, user_id: int, habit_id: int) -> Habit:
@@ -437,6 +574,33 @@ class HabitService:
         if habit is None:
             raise HabitNotFoundError("Привычка не найдена.")
         return habit
+
+    async def _sync_goal_achievement(
+        self,
+        habit: Habit,
+        *,
+        completion_dates: list[date] | None = None,
+        target_date: date | None = None,
+    ) -> None:
+        if habit.goal_type is None or habit.goal_target_value is None:
+            if habit.goal_achieved_at is not None:
+                await self._habit_repository.update_goal_achieved_at(habit, None)
+            return
+
+        resolved_target_date = target_date or self._get_today()
+        resolved_completion_dates = (
+            completion_dates
+            if completion_dates is not None
+            else await self._habit_log_repository.get_completion_dates(habit.id)
+        )
+        progress = HabitGoalService.calculate_progress(
+            habit,
+            resolved_completion_dates,
+            resolved_target_date,
+        )
+        achieved_at = HabitGoalService.resolve_goal_achieved_at(habit, progress)
+        if achieved_at != habit.goal_achieved_at:
+            await self._habit_repository.update_goal_achieved_at(habit, achieved_at)
 
     @staticmethod
     def _build_last_7_days_progress_text(

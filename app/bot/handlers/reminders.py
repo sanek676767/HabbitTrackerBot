@@ -10,6 +10,7 @@ from app.bot.callbacks import (
     HabitReminderMenuCallback,
     HabitReminderSetTimeCallback,
 )
+from app.bot.habit_text import build_habit_card_text
 from app.bot.keyboards import (
     ALL_MAIN_MENU_BUTTONS,
     get_habit_card_keyboard,
@@ -18,7 +19,6 @@ from app.bot.keyboards import (
 )
 from app.services.habit_service import (
     HabitArchivedError,
-    HabitCard,
     HabitDeletedError,
     HabitNotFoundError,
     HabitReminderState,
@@ -68,7 +68,7 @@ async def open_reminder_menu(
         else None
     )
     await callback.message.edit_text(
-        _build_reminder_menu_text(habit_card, reminder_state, local_time_status),
+        _build_reminder_menu_text(habit_card.title, habit_card.frequency_text, reminder_state, local_time_status, habit_card.is_active),
         reply_markup=get_habit_reminder_menu_keyboard(
             habit_id=habit_card.id,
             source=callback_data.source,
@@ -121,7 +121,7 @@ async def start_reminder_setup(
     if user.utc_offset_minutes is None:
         await state.set_state(HabitReminderStates.waiting_for_current_time)
         await callback.message.edit_text(
-            _build_current_local_time_prompt_text(habit_card),
+            _build_current_local_time_prompt_text(habit_card.title),
             reply_markup=get_habit_reminder_input_keyboard(habit_card.id, callback_data.source),
         )
         await callback.answer()
@@ -129,7 +129,7 @@ async def start_reminder_setup(
 
     await state.set_state(HabitReminderStates.waiting_for_time)
     await callback.message.edit_text(
-        _build_reminder_time_prompt_text(habit_card, reminder_state),
+        _build_reminder_time_prompt_text(habit_card.title, reminder_state),
         reply_markup=get_habit_reminder_input_keyboard(habit_card.id, callback_data.source),
     )
     await callback.answer()
@@ -170,7 +170,7 @@ async def cancel_reminder_setup(
 
     await state.clear()
     await callback.message.edit_text(
-        _build_habit_card_text(habit_card),
+        build_habit_card_text(habit_card),
         reply_markup=get_habit_card_keyboard(
             habit_card.id,
             callback_data.source,
@@ -209,7 +209,7 @@ async def disable_reminder(
         return
 
     await callback.message.edit_text(
-        _build_habit_card_text(habit_card),
+        build_habit_card_text(habit_card),
         reply_markup=get_habit_card_keyboard(
             habit_card.id,
             callback_data.source,
@@ -284,7 +284,7 @@ async def save_current_local_time(
         bot=message.bot,
         chat_id=prompt_chat_id,
         message_id=prompt_message_id,
-        text=_build_reminder_time_prompt_text(habit_card, reminder_state),
+        text=_build_reminder_time_prompt_text(habit_card.title, reminder_state),
         reply_markup=get_habit_reminder_input_keyboard(habit_card.id, source),
     )
     await state.update_data(
@@ -371,7 +371,7 @@ async def save_reminder_time(
         bot=message.bot,
         chat_id=prompt_chat_id,
         message_id=prompt_message_id,
-        text=_build_habit_card_text(habit_card),
+        text=build_habit_card_text(habit_card),
         reply_markup=get_habit_card_keyboard(
             habit_card.id,
             source,
@@ -384,9 +384,11 @@ async def save_reminder_time(
 
 
 def _build_reminder_menu_text(
-    habit_card: HabitCard,
+    title: str,
+    frequency_text: str,
     reminder_state: HabitReminderState,
     local_time_status: str | None,
+    is_active: bool,
 ) -> str:
     reminder_time = (
         reminder_state.reminder_time.strftime("%H:%M")
@@ -395,9 +397,9 @@ def _build_reminder_menu_text(
     )
 
     lines = [
-        f"⏰ Напоминание для «{html.quote(habit_card.title)}»",
+        f"⏰ Напоминание для «{html.quote(title)}»",
         "",
-        f"Частота: {habit_card.frequency_text}",
+        f"Частота: {frequency_text}",
         f"Сейчас: {'включено' if reminder_state.enabled else 'выключено'}",
         f"Время: {reminder_time}",
         (
@@ -407,7 +409,7 @@ def _build_reminder_menu_text(
         ),
     ]
 
-    if not habit_card.is_active:
+    if not is_active:
         lines.extend(
             [
                 "",
@@ -432,10 +434,10 @@ def _build_reminder_menu_text(
     return "\n".join(lines)
 
 
-def _build_current_local_time_prompt_text(habit_card: HabitCard) -> str:
+def _build_current_local_time_prompt_text(title: str) -> str:
     return "\n".join(
         [
-            f"⏰ Напоминание для «{html.quote(habit_card.title)}»",
+            f"⏰ Напоминание для «{html.quote(title)}»",
             "",
             "Сначала напиши, сколько у тебя сейчас времени.",
             "Формат: ЧЧ:ММ",
@@ -445,11 +447,11 @@ def _build_current_local_time_prompt_text(habit_card: HabitCard) -> str:
 
 
 def _build_reminder_time_prompt_text(
-    habit_card: HabitCard,
+    title: str,
     reminder_state: HabitReminderState,
 ) -> str:
     lines = [
-        f"⏰ Напоминание для «{html.quote(habit_card.title)}»",
+        f"⏰ Напоминание для «{html.quote(title)}»",
         "",
         "Теперь напиши время напоминания.",
         "Формат: ЧЧ:ММ",
@@ -465,35 +467,6 @@ def _build_reminder_time_prompt_text(
         )
 
     return "\n".join(lines)
-
-
-def _build_habit_card_text(habit_card: HabitCard) -> str:
-    if habit_card.is_completed_today:
-        today_status = "выполнена"
-    elif habit_card.is_due_today:
-        today_status = "ждёт отметку"
-    else:
-        today_status = "на сегодня не запланирована"
-
-    reminder_status = (
-        habit_card.reminder_time.strftime("%H:%M")
-        if habit_card.reminder_enabled and habit_card.reminder_time is not None
-        else "выключено"
-    )
-    active_status = "активна" if habit_card.is_active else "в архиве"
-    return "\n".join(
-        [
-            f"📌 {html.quote(habit_card.title)}",
-            "",
-            f"Частота: {habit_card.frequency_text}",
-            f"Сегодня: {today_status}",
-            f"Текущая серия: {habit_card.current_streak}",
-            f"Лучшая серия: {habit_card.best_streak}",
-            f"Всего отметок: {habit_card.total_completions}",
-            f"Напоминание: {reminder_status}",
-            f"Статус: {active_status}",
-        ]
-    )
 
 
 async def _render_message(

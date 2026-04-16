@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timezone
 
 import pytest
 
+from app.services.habit_goal_service import HabitGoalService
 from app.services.habit_service import (
     HabitDeletedError,
     HabitNotDueTodayError,
@@ -32,6 +33,9 @@ class FakeHabitRepository:
         start_date: date | None = None,
         reminder_enabled: bool = False,
         reminder_time: time | None = None,
+        goal_type: str | None = None,
+        goal_target_value: int | None = None,
+        goal_achieved_at: datetime | None = None,
     ):
         self.create_called = True
         self.habit = make_habit(
@@ -44,6 +48,9 @@ class FakeHabitRepository:
             start_date=start_date or date.today(),
             reminder_enabled=reminder_enabled,
             reminder_time=reminder_time,
+            goal_type=goal_type,
+            goal_target_value=goal_target_value,
+            goal_achieved_at=goal_achieved_at,
         )
         return self.habit
 
@@ -55,8 +62,58 @@ class FakeHabitRepository:
     async def get_active_habits_by_user(self, user_id: int):
         return [habit for habit in self.active_habits if habit.user_id == user_id]
 
+    async def get_archived_habits_by_user(self, user_id: int):
+        return [
+            habit
+            for habit in self.active_habits
+            if habit.user_id == user_id and not habit.is_active and not habit.is_deleted
+        ]
+
     async def update_title(self, habit, title: str):
         habit.title = title
+        return habit
+
+    async def update_schedule(
+        self,
+        habit,
+        *,
+        frequency_type: str,
+        frequency_interval: int | None,
+        week_days_mask: int | None,
+        start_date: date,
+    ):
+        habit.frequency_type = frequency_type
+        habit.frequency_interval = frequency_interval
+        habit.week_days_mask = week_days_mask
+        habit.start_date = start_date
+        return habit
+
+    async def update_reminder(self, habit, enabled: bool, reminder_time: time | None):
+        habit.reminder_enabled = enabled
+        habit.reminder_time = reminder_time if enabled else None
+        return habit
+
+    async def update_goal(
+        self,
+        habit,
+        *,
+        goal_type: str,
+        goal_target_value: int,
+        goal_achieved_at: datetime | None,
+    ):
+        habit.goal_type = goal_type
+        habit.goal_target_value = goal_target_value
+        habit.goal_achieved_at = goal_achieved_at
+        return habit
+
+    async def clear_goal(self, habit):
+        habit.goal_type = None
+        habit.goal_target_value = None
+        habit.goal_achieved_at = None
+        return habit
+
+    async def update_goal_achieved_at(self, habit, goal_achieved_at: datetime | None):
+        habit.goal_achieved_at = goal_achieved_at
         return habit
 
     async def archive_habit(self, habit):
@@ -79,6 +136,13 @@ class FakeHabitRepository:
     async def update_last_completed_at(self, habit, last_completed_at: datetime):
         habit.last_completed_at = last_completed_at
         return habit
+
+    async def count_active_habits(self, user_id: int) -> int:
+        return sum(
+            1
+            for habit in self.active_habits
+            if habit.user_id == user_id and habit.is_active and not habit.is_deleted
+        )
 
 
 class FakeHabitLogRepository:
@@ -104,7 +168,13 @@ class FakeHabitLogRepository:
         return len(self.completed_today_ids)
 
 
-def build_service(dummy_session, habit=None, active_habits=None, completed_dates=None, completed_today_ids=None) -> HabitService:
+def build_service(
+    dummy_session,
+    habit=None,
+    active_habits=None,
+    completed_dates=None,
+    completed_today_ids=None,
+) -> HabitService:
     return HabitService(
         session=dummy_session,
         habit_repository=FakeHabitRepository(habit, active_habits),
@@ -132,7 +202,7 @@ async def test_create_habit_rejects_too_long_title(dummy_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_habit_saves_every_other_day_schedule(dummy_session) -> None:
+async def test_create_habit_saves_schedule_and_goal(dummy_session) -> None:
     service = build_service(dummy_session)
 
     habit = await service.create_habit(
@@ -143,6 +213,8 @@ async def test_create_habit_saves_every_other_day_schedule(dummy_session) -> Non
         reminder_enabled=True,
         reminder_time=time(9, 30),
         start_date=date(2026, 4, 4),
+        goal_type=HabitGoalService.COMPLETIONS,
+        goal_target_value=20,
     )
 
     assert habit.frequency_type == "interval"
@@ -150,6 +222,8 @@ async def test_create_habit_saves_every_other_day_schedule(dummy_session) -> Non
     assert habit.week_days_mask is None
     assert habit.reminder_enabled is True
     assert habit.reminder_time == time(9, 30)
+    assert habit.goal_type == "completions"
+    assert habit.goal_target_value == 20
 
 
 @pytest.mark.asyncio
@@ -203,6 +277,88 @@ async def test_complete_habit_rejects_when_not_due_today(dummy_session, monkeypa
 
     with pytest.raises(HabitNotDueTodayError):
         await service.complete_habit_for_today(1, 5)
+
+
+@pytest.mark.asyncio
+async def test_update_habit_schedule_resets_start_date_to_today(dummy_session, monkeypatch) -> None:
+    target_date = date(2026, 4, 10)
+    habit = make_habit(
+        id=5,
+        user_id=1,
+        frequency_type="daily",
+        start_date=date(2026, 4, 1),
+    )
+    service = build_service(dummy_session, habit=habit)
+    monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
+
+    habit_card = await service.update_habit_schedule(
+        1,
+        5,
+        frequency_type=HabitScheduleService.INTERVAL,
+        frequency_interval=2,
+    )
+
+    assert habit.frequency_type == "interval"
+    assert habit.frequency_interval == 2
+    assert habit.start_date == target_date
+    assert habit_card.frequency_text == "через день"
+
+
+@pytest.mark.asyncio
+async def test_update_reminder_time_changes_state(dummy_session) -> None:
+    habit = make_habit(id=5, user_id=1, reminder_enabled=False, reminder_time=None)
+    service = build_service(dummy_session, habit=habit)
+
+    result = await service.enable_reminder(1, 5, "09:30")
+
+    assert result.enabled is True
+    assert result.reminder_time == time(9, 30)
+    assert habit.reminder_enabled is True
+    assert habit.reminder_time == time(9, 30)
+
+
+@pytest.mark.asyncio
+async def test_update_habit_goal_returns_progress(dummy_session, monkeypatch) -> None:
+    target_date = date(2026, 4, 10)
+    habit = make_habit(id=6, user_id=1)
+    service = build_service(
+        dummy_session,
+        habit=habit,
+        completed_dates={6: [date(2026, 4, 8), date(2026, 4, 9)]},
+    )
+    monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
+
+    habit_card = await service.update_habit_goal(
+        1,
+        6,
+        goal_type=HabitGoalService.COMPLETIONS,
+        goal_target_value=5,
+    )
+
+    assert habit.goal_type == "completions"
+    assert habit.goal_target_value == 5
+    assert habit_card.goal is not None
+    assert habit_card.goal.progress_text == "2 / 5"
+    assert habit_card.goal.goal_text == "5 выполнений"
+
+
+@pytest.mark.asyncio
+async def test_clear_habit_goal_removes_goal_from_card(dummy_session, monkeypatch) -> None:
+    target_date = date(2026, 4, 10)
+    habit = make_habit(
+        id=6,
+        user_id=1,
+        goal_type="streak",
+        goal_target_value=7,
+    )
+    service = build_service(dummy_session, habit=habit)
+    monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
+
+    habit_card = await service.clear_habit_goal(1, 6)
+
+    assert habit.goal_type is None
+    assert habit.goal_target_value is None
+    assert habit_card.goal is None
 
 
 @pytest.mark.asyncio
