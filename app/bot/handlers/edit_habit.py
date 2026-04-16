@@ -5,7 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from app.bot.callbacks import HabitEditActionCallback, HabitEditCallback
-from app.bot.habit_text import build_habit_card_text
+from app.bot.habit_text import build_habit_card_text, build_habit_edit_menu_text
 from app.bot.keyboards import (
     ALL_MAIN_MENU_BUTTONS,
     get_habit_card_keyboard,
@@ -61,13 +61,7 @@ async def start_edit_habit(
 
     await state.clear()
     await callback.message.edit_text(
-        _build_edit_menu_text(
-            habit_card.title,
-            habit_card.frequency_text,
-            habit_card.reminder_enabled,
-            habit_card.reminder_time,
-            habit_card.goal,
-        ),
+        build_habit_edit_menu_text(habit_card),
         reply_markup=get_habit_edit_keyboard(habit_card.id, callback_data.source),
     )
     await callback.answer()
@@ -276,13 +270,7 @@ async def handle_frequency_edit(
         habit_card = await habit_service.get_habit_card(user.id, callback_data.habit_id)
         await state.clear()
         await callback.message.edit_text(
-            _build_edit_menu_text(
-                habit_card.title,
-                habit_card.frequency_text,
-                habit_card.reminder_enabled,
-                habit_card.reminder_time,
-                habit_card.goal,
-            ),
+            build_habit_edit_menu_text(habit_card),
             reply_markup=get_habit_edit_keyboard(habit_card.id, callback_data.source),
         )
         await callback.answer()
@@ -445,32 +433,6 @@ async def handle_weekdays_edit(
         ),
     )
     await callback.answer("Частоту обновил.")
-
-
-def _build_edit_menu_text(
-    title: str,
-    frequency_text: str,
-    reminder_enabled: bool,
-    reminder_time,
-    goal,
-) -> str:
-    reminder_text = (
-        reminder_time.strftime("%H:%M")
-        if reminder_enabled and reminder_time is not None
-        else "выключено"
-    )
-    goal_text = goal.goal_text if goal is not None else "не задана"
-    return "\n".join(
-        [
-            f"✏️ Редактирование «{html.quote(title)}»",
-            "",
-            f"Частота: {frequency_text}",
-            f"Напоминание: {reminder_text}",
-            f"Цель: {goal_text}",
-            "",
-            "Выбери, что хочешь изменить.",
-        ]
-    )
 
 
 def _build_title_prompt_text(title: str) -> str:

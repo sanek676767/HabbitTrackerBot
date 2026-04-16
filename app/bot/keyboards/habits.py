@@ -13,6 +13,7 @@ from app.bot.callbacks import (
     HabitGoalMenuCallback,
     HabitListCallback,
     HabitListSource,
+    HabitReturnTarget,
     HabitReminderCancelCallback,
     HabitReminderDisableCallback,
     HabitReminderMenuCallback,
@@ -105,6 +106,7 @@ def get_habit_card_keyboard(
                 callback_data=HabitGoalMenuCallback(
                     habit_id=habit_id,
                     source=source,
+                    return_to=HabitReturnTarget.CARD.value,
                 ).pack(),
             ),
             InlineKeyboardButton(
@@ -112,6 +114,7 @@ def get_habit_card_keyboard(
                 callback_data=HabitReminderMenuCallback(
                     habit_id=habit_id,
                     source=source,
+                    return_to=HabitReturnTarget.CARD.value,
                 ).pack(),
             ),
         ]
@@ -241,6 +244,7 @@ def get_habit_edit_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
                     callback_data=HabitReminderMenuCallback(
                         habit_id=habit_id,
                         source=source,
+                        return_to=HabitReturnTarget.EDIT.value,
                     ).pack(),
                 )
             ],
@@ -250,6 +254,7 @@ def get_habit_edit_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
                     callback_data=HabitGoalMenuCallback(
                         habit_id=habit_id,
                         source=source,
+                        return_to=HabitReturnTarget.EDIT.value,
                     ).pack(),
                 )
             ],
@@ -399,6 +404,7 @@ def get_habit_goal_menu_keyboard(
     source: str,
     *,
     has_goal: bool,
+    return_to: str,
 ) -> InlineKeyboardMarkup:
     rows = [
         [
@@ -408,6 +414,7 @@ def get_habit_goal_menu_keyboard(
                     action="completions",
                     habit_id=habit_id,
                     source=source,
+                    return_to=return_to,
                 ).pack(),
             )
         ],
@@ -418,6 +425,7 @@ def get_habit_goal_menu_keyboard(
                     action="streak",
                     habit_id=habit_id,
                     source=source,
+                    return_to=return_to,
                 ).pack(),
             )
         ],
@@ -432,6 +440,7 @@ def get_habit_goal_menu_keyboard(
                         action="clear",
                         habit_id=habit_id,
                         source=source,
+                        return_to=return_to,
                     ).pack(),
                 )
             ]
@@ -445,6 +454,7 @@ def get_habit_goal_menu_keyboard(
                     action="back",
                     habit_id=habit_id,
                     source=source,
+                    return_to=return_to,
                 ).pack(),
             )
         ]
@@ -452,7 +462,11 @@ def get_habit_goal_menu_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_habit_goal_input_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
+def get_habit_goal_input_keyboard(
+    habit_id: int,
+    source: str,
+    return_to: str,
+) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -462,6 +476,7 @@ def get_habit_goal_input_keyboard(habit_id: int, source: str) -> InlineKeyboardM
                         action="back_to_menu",
                         habit_id=habit_id,
                         source=source,
+                        return_to=return_to,
                     ).pack(),
                 )
             ]
@@ -475,6 +490,7 @@ def get_habit_reminder_menu_keyboard(
     *,
     can_set_time: bool,
     can_disable: bool,
+    return_to: str,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
 
@@ -486,6 +502,7 @@ def get_habit_reminder_menu_keyboard(
                     callback_data=HabitReminderSetTimeCallback(
                         habit_id=habit_id,
                         source=source,
+                        return_to=return_to,
                     ).pack(),
                 )
             ]
@@ -499,6 +516,7 @@ def get_habit_reminder_menu_keyboard(
                     callback_data=HabitReminderDisableCallback(
                         habit_id=habit_id,
                         source=source,
+                        return_to=return_to,
                     ).pack(),
                 )
             ]
@@ -508,10 +526,17 @@ def get_habit_reminder_menu_keyboard(
         [
             InlineKeyboardButton(
                 text="⬅️ К привычке",
-                callback_data=HabitViewCallback(
-                    habit_id=habit_id,
-                    source=source,
-                ).pack(),
+                callback_data=(
+                    HabitEditCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack()
+                    if return_to == HabitReturnTarget.EDIT.value
+                    else HabitViewCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack()
+                ),
             )
         ]
     )
@@ -519,7 +544,11 @@ def get_habit_reminder_menu_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_habit_reminder_input_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup:
+def get_habit_reminder_input_keyboard(
+    habit_id: int,
+    source: str,
+    return_to: str,
+) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -528,6 +557,7 @@ def get_habit_reminder_input_keyboard(habit_id: int, source: str) -> InlineKeybo
                     callback_data=HabitReminderCancelCallback(
                         habit_id=habit_id,
                         source=source,
+                        return_to=return_to,
                     ).pack(),
                 )
             ]

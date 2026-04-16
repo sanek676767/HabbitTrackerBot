@@ -4,11 +4,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
-from app.bot.callbacks import HabitGoalActionCallback, HabitGoalMenuCallback
-from app.bot.habit_text import build_habit_card_text
+from app.bot.callbacks import HabitGoalActionCallback, HabitGoalMenuCallback, HabitReturnTarget
+from app.bot.habit_text import build_habit_card_text, build_habit_edit_menu_text
 from app.bot.keyboards import (
     ALL_MAIN_MENU_BUTTONS,
     get_habit_card_keyboard,
+    get_habit_edit_keyboard,
     get_habit_goal_input_keyboard,
     get_habit_goal_menu_keyboard,
 )
@@ -27,6 +28,21 @@ router = Router(name="habit_goals")
 
 class HabitGoalStates(StatesGroup):
     waiting_for_target_value = State()
+
+
+@router.callback_query(F.data.regexp(r"^habit_goal_menu:\d+:[^:]+$"))
+async def open_goal_menu_legacy(
+    callback: CallbackQuery,
+    state: FSMContext,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    callback_data = _parse_legacy_goal_menu_callback(callback.data)
+    if callback_data is None:
+        await callback.answer()
+        return
+
+    await open_goal_menu(callback, callback_data, state, user_service, habit_service)
 
 
 @router.callback_query(HabitGoalMenuCallback.filter())
@@ -62,9 +78,33 @@ async def open_goal_menu(
             habit_card.id,
             callback_data.source,
             has_goal=habit_card.goal is not None,
+            return_to=callback_data.return_to,
         ),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^habit_goal_action:[^:]+:\d+:[^:]+$"))
+async def handle_goal_action_legacy(
+    callback: CallbackQuery,
+    state: FSMContext,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    callback_data = _parse_legacy_goal_action_callback(callback.data)
+    if callback_data is None:
+        await callback.answer()
+        return
+
+    if callback_data.action == "back":
+        await close_goal_menu(callback, callback_data, state, user_service, habit_service)
+        return
+
+    if callback_data.action == "clear":
+        await clear_goal(callback, callback_data, state, user_service, habit_service)
+        return
+
+    await start_goal_setup(callback, callback_data, state, user_service, habit_service)
 
 
 @router.callback_query(HabitGoalActionCallback.filter(F.action == "back"))
@@ -94,16 +134,22 @@ async def close_goal_menu(
         return
 
     await state.clear()
-    await callback.message.edit_text(
-        build_habit_card_text(habit_card),
-        reply_markup=get_habit_card_keyboard(
-            habit_card.id,
-            callback_data.source,
-            is_completed_today=habit_card.is_completed_today,
-            is_active=habit_card.is_active,
-            is_due_today=habit_card.is_due_today,
-        ),
-    )
+    if callback_data.return_to == HabitReturnTarget.EDIT.value:
+        await callback.message.edit_text(
+            build_habit_edit_menu_text(habit_card),
+            reply_markup=get_habit_edit_keyboard(habit_card.id, callback_data.source),
+        )
+    else:
+        await callback.message.edit_text(
+            build_habit_card_text(habit_card),
+            reply_markup=get_habit_card_keyboard(
+                habit_card.id,
+                callback_data.source,
+                is_completed_today=habit_card.is_completed_today,
+                is_active=habit_card.is_active,
+                is_due_today=habit_card.is_due_today,
+            ),
+        )
     await callback.answer()
 
 
@@ -181,6 +227,7 @@ async def start_goal_setup(
                 habit_card.id,
                 callback_data.source,
                 has_goal=habit_card.goal is not None,
+                return_to=callback_data.return_to,
             ),
         )
         await callback.answer()
@@ -208,13 +255,18 @@ async def start_goal_setup(
     await state.update_data(
         habit_id=habit_card.id,
         source=callback_data.source,
+        return_to=callback_data.return_to,
         goal_type=goal_type,
         prompt_chat_id=callback.message.chat.id,
         prompt_message_id=callback.message.message_id,
     )
     await callback.message.edit_text(
         _build_goal_value_prompt_text(goal_type, habit_card.title),
-        reply_markup=get_habit_goal_input_keyboard(habit_card.id, callback_data.source),
+        reply_markup=get_habit_goal_input_keyboard(
+            habit_card.id,
+            callback_data.source,
+            callback_data.return_to,
+        ),
     )
     await callback.answer()
 
@@ -382,3 +434,57 @@ async def _render_card_message(
             ),
         )
         return sent_message.chat.id, sent_message.message_id
+
+
+def _parse_legacy_goal_menu_callback(data: str | None) -> HabitGoalMenuCallback | None:
+    parsed = _parse_legacy_habit_callback(data, prefix="habit_goal_menu")
+    if parsed is None:
+        return None
+
+    habit_id, source = parsed
+    return HabitGoalMenuCallback(
+        habit_id=habit_id,
+        source=source,
+        return_to=HabitReturnTarget.CARD.value,
+    )
+
+
+def _parse_legacy_goal_action_callback(data: str | None) -> HabitGoalActionCallback | None:
+    if data is None:
+        return None
+
+    parts = data.split(":", maxsplit=3)
+    if len(parts) != 4 or parts[0] != "habit_goal_action":
+        return None
+
+    try:
+        habit_id = int(parts[2])
+    except ValueError:
+        return None
+
+    return HabitGoalActionCallback(
+        action=parts[1],
+        habit_id=habit_id,
+        source=parts[3],
+        return_to=HabitReturnTarget.CARD.value,
+    )
+
+
+def _parse_legacy_habit_callback(
+    data: str | None,
+    *,
+    prefix: str,
+) -> tuple[int, str] | None:
+    if data is None:
+        return None
+
+    parts = data.split(":", maxsplit=2)
+    if len(parts) != 3 or parts[0] != prefix:
+        return None
+
+    try:
+        habit_id = int(parts[1])
+    except ValueError:
+        return None
+
+    return habit_id, parts[2]

@@ -81,12 +81,12 @@ class HabitGoalService:
         if config is None:
             return None
 
-        if isinstance(completion_dates, set):
-            completion_dates_set = completion_dates
-            completion_dates_list = sorted(completion_dates)
-        else:
-            completion_dates_list = [item for item in completion_dates if item <= target_date]
-            completion_dates_set = set(completion_dates_list)
+        completion_dates_list = sorted(
+            item
+            for item in completion_dates
+            if item <= target_date
+        )
+        completion_dates_set = set(completion_dates_list)
 
         if config.goal_type == cls.COMPLETIONS:
             current_value = sum(1 for item in completion_dates_list if item <= target_date)

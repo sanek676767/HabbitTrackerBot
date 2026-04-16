@@ -305,6 +305,33 @@ async def test_update_habit_schedule_resets_start_date_to_today(dummy_session, m
 
 
 @pytest.mark.asyncio
+async def test_update_habit_schedule_to_weekdays_updates_mask_and_card(dummy_session, monkeypatch) -> None:
+    target_date = date(2026, 4, 10)
+    weekdays_mask = HabitScheduleService.build_week_days_mask([0, 2, 4])
+    habit = make_habit(
+        id=5,
+        user_id=1,
+        frequency_type="daily",
+        start_date=date(2026, 4, 1),
+    )
+    service = build_service(dummy_session, habit=habit)
+    monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
+
+    habit_card = await service.update_habit_schedule(
+        1,
+        5,
+        frequency_type=HabitScheduleService.WEEKDAYS,
+        week_days_mask=weekdays_mask,
+    )
+
+    assert habit.frequency_type == "weekdays"
+    assert habit.frequency_interval is None
+    assert habit.week_days_mask == weekdays_mask
+    assert habit.start_date == target_date
+    assert habit_card.frequency_text == HabitScheduleService.format_weekdays(weekdays_mask)
+
+
+@pytest.mark.asyncio
 async def test_update_reminder_time_changes_state(dummy_session) -> None:
     habit = make_habit(id=5, user_id=1, reminder_enabled=False, reminder_time=None)
     service = build_service(dummy_session, habit=habit)
@@ -315,6 +342,24 @@ async def test_update_reminder_time_changes_state(dummy_session) -> None:
     assert result.reminder_time == time(9, 30)
     assert habit.reminder_enabled is True
     assert habit.reminder_time == time(9, 30)
+
+
+@pytest.mark.asyncio
+async def test_disable_reminder_clears_saved_time(dummy_session) -> None:
+    habit = make_habit(
+        id=5,
+        user_id=1,
+        reminder_enabled=True,
+        reminder_time=time(21, 15),
+    )
+    service = build_service(dummy_session, habit=habit)
+
+    result = await service.disable_reminder(1, 5)
+
+    assert result.enabled is False
+    assert result.reminder_time is None
+    assert habit.reminder_enabled is False
+    assert habit.reminder_time is None
 
 
 @pytest.mark.asyncio

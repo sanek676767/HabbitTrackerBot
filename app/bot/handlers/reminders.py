@@ -1,4 +1,4 @@
-from aiogram import Bot, Router, html
+from aiogram import Bot, F, Router, html
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -8,12 +8,14 @@ from app.bot.callbacks import (
     HabitReminderCancelCallback,
     HabitReminderDisableCallback,
     HabitReminderMenuCallback,
+    HabitReturnTarget,
     HabitReminderSetTimeCallback,
 )
-from app.bot.habit_text import build_habit_card_text
+from app.bot.habit_text import build_habit_card_text, build_habit_edit_menu_text
 from app.bot.keyboards import (
     ALL_MAIN_MENU_BUTTONS,
     get_habit_card_keyboard,
+    get_habit_edit_keyboard,
     get_habit_reminder_input_keyboard,
     get_habit_reminder_menu_keyboard,
 )
@@ -34,6 +36,20 @@ router = Router(name="reminders")
 class HabitReminderStates(StatesGroup):
     waiting_for_current_time = State()
     waiting_for_time = State()
+
+
+@router.callback_query(F.data.regexp(r"^habit_reminder_menu:\d+:[^:]+$"))
+async def open_reminder_menu_legacy(
+    callback: CallbackQuery,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    callback_data = _parse_legacy_reminder_menu_callback(callback.data)
+    if callback_data is None:
+        await callback.answer()
+        return
+
+    await open_reminder_menu(callback, callback_data, user_service, habit_service)
 
 
 @router.callback_query(HabitReminderMenuCallback.filter())
@@ -74,9 +90,29 @@ async def open_reminder_menu(
             source=callback_data.source,
             can_set_time=habit_card.is_active,
             can_disable=reminder_state.enabled,
+            return_to=callback_data.return_to,
         ),
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r"^habit_reminder_set_time:\d+:[^:]+$"))
+async def start_reminder_setup_legacy(
+    callback: CallbackQuery,
+    state: FSMContext,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    callback_data = _parse_legacy_reminder_action_callback(
+        callback.data,
+        prefix="habit_reminder_set_time",
+        callback_factory=HabitReminderSetTimeCallback,
+    )
+    if callback_data is None:
+        await callback.answer()
+        return
+
+    await start_reminder_setup(callback, callback_data, state, user_service, habit_service)
 
 
 @router.callback_query(HabitReminderSetTimeCallback.filter())
@@ -113,6 +149,7 @@ async def start_reminder_setup(
     await state.update_data(
         habit_id=habit_card.id,
         source=callback_data.source,
+        return_to=callback_data.return_to,
         mode="update" if reminder_state.enabled else "enable",
         prompt_chat_id=callback.message.chat.id,
         prompt_message_id=callback.message.message_id,
@@ -122,7 +159,11 @@ async def start_reminder_setup(
         await state.set_state(HabitReminderStates.waiting_for_current_time)
         await callback.message.edit_text(
             _build_current_local_time_prompt_text(habit_card.title),
-            reply_markup=get_habit_reminder_input_keyboard(habit_card.id, callback_data.source),
+            reply_markup=get_habit_reminder_input_keyboard(
+                habit_card.id,
+                callback_data.source,
+                callback_data.return_to,
+            ),
         )
         await callback.answer()
         return
@@ -130,9 +171,39 @@ async def start_reminder_setup(
     await state.set_state(HabitReminderStates.waiting_for_time)
     await callback.message.edit_text(
         _build_reminder_time_prompt_text(habit_card.title, reminder_state),
-        reply_markup=get_habit_reminder_input_keyboard(habit_card.id, callback_data.source),
+        reply_markup=get_habit_reminder_input_keyboard(
+            habit_card.id,
+            callback_data.source,
+            callback_data.return_to,
+        ),
     )
     await callback.answer()
+
+
+@router.callback_query(
+    HabitReminderStates.waiting_for_current_time,
+    F.data.regexp(r"^habit_reminder_cancel:\d+:[^:]+$"),
+)
+@router.callback_query(
+    HabitReminderStates.waiting_for_time,
+    F.data.regexp(r"^habit_reminder_cancel:\d+:[^:]+$"),
+)
+async def cancel_reminder_setup_legacy(
+    callback: CallbackQuery,
+    state: FSMContext,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    callback_data = _parse_legacy_reminder_action_callback(
+        callback.data,
+        prefix="habit_reminder_cancel",
+        callback_factory=HabitReminderCancelCallback,
+    )
+    if callback_data is None:
+        await callback.answer()
+        return
+
+    await cancel_reminder_setup(callback, callback_data, state, user_service, habit_service)
 
 
 @router.callback_query(
@@ -169,17 +240,41 @@ async def cancel_reminder_setup(
         return
 
     await state.clear()
-    await callback.message.edit_text(
-        build_habit_card_text(habit_card),
-        reply_markup=get_habit_card_keyboard(
-            habit_card.id,
-            callback_data.source,
-            is_completed_today=habit_card.is_completed_today,
-            is_active=habit_card.is_active,
-            is_due_today=habit_card.is_due_today,
-        ),
-    )
+    if callback_data.return_to == HabitReturnTarget.EDIT.value:
+        await callback.message.edit_text(
+            build_habit_edit_menu_text(habit_card),
+            reply_markup=get_habit_edit_keyboard(habit_card.id, callback_data.source),
+        )
+    else:
+        await callback.message.edit_text(
+            build_habit_card_text(habit_card),
+            reply_markup=get_habit_card_keyboard(
+                habit_card.id,
+                callback_data.source,
+                is_completed_today=habit_card.is_completed_today,
+                is_active=habit_card.is_active,
+                is_due_today=habit_card.is_due_today,
+            ),
+        )
     await callback.answer("Настройку напоминания отменил.")
+
+
+@router.callback_query(F.data.regexp(r"^habit_reminder_disable:\d+:[^:]+$"))
+async def disable_reminder_legacy(
+    callback: CallbackQuery,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    callback_data = _parse_legacy_reminder_action_callback(
+        callback.data,
+        prefix="habit_reminder_disable",
+        callback_factory=HabitReminderDisableCallback,
+    )
+    if callback_data is None:
+        await callback.answer()
+        return
+
+    await disable_reminder(callback, callback_data, user_service, habit_service)
 
 
 @router.callback_query(HabitReminderDisableCallback.filter())
@@ -245,12 +340,14 @@ async def save_current_local_time(
     state_data = await state.get_data()
     habit_id = state_data.get("habit_id")
     source = state_data.get("source")
+    return_to = state_data.get("return_to")
     prompt_chat_id = state_data.get("prompt_chat_id")
     prompt_message_id = state_data.get("prompt_message_id")
 
     if (
         not isinstance(habit_id, int)
         or not isinstance(source, str)
+        or not isinstance(return_to, str)
         or not isinstance(prompt_chat_id, int)
         or not isinstance(prompt_message_id, int)
     ):
@@ -285,7 +382,11 @@ async def save_current_local_time(
         chat_id=prompt_chat_id,
         message_id=prompt_message_id,
         text=_build_reminder_time_prompt_text(habit_card.title, reminder_state),
-        reply_markup=get_habit_reminder_input_keyboard(habit_card.id, source),
+        reply_markup=get_habit_reminder_input_keyboard(
+            habit_card.id,
+            source,
+            return_to,
+        ),
     )
     await state.update_data(
         prompt_chat_id=new_prompt_chat_id,
@@ -491,3 +592,54 @@ async def _render_message(
             reply_markup=reply_markup,
         )
         return sent_message.chat.id, sent_message.message_id
+
+
+def _parse_legacy_reminder_menu_callback(data: str | None) -> HabitReminderMenuCallback | None:
+    parsed = _parse_legacy_habit_callback(data, prefix="habit_reminder_menu")
+    if parsed is None:
+        return None
+
+    habit_id, source = parsed
+    return HabitReminderMenuCallback(
+        habit_id=habit_id,
+        source=source,
+        return_to=HabitReturnTarget.CARD.value,
+    )
+
+
+def _parse_legacy_reminder_action_callback(
+    data: str | None,
+    *,
+    prefix: str,
+    callback_factory,
+):
+    parsed = _parse_legacy_habit_callback(data, prefix=prefix)
+    if parsed is None:
+        return None
+
+    habit_id, source = parsed
+    return callback_factory(
+        habit_id=habit_id,
+        source=source,
+        return_to=HabitReturnTarget.CARD.value,
+    )
+
+
+def _parse_legacy_habit_callback(
+    data: str | None,
+    *,
+    prefix: str,
+) -> tuple[int, str] | None:
+    if data is None:
+        return None
+
+    parts = data.split(":", maxsplit=2)
+    if len(parts) != 3 or parts[0] != prefix:
+        return None
+
+    try:
+        habit_id = int(parts[1])
+    except ValueError:
+        return None
+
+    return habit_id, parts[2]

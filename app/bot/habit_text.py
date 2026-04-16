@@ -41,6 +41,37 @@ def build_habit_card_text(habit_card: HabitCard) -> str:
     return "\n".join(lines)
 
 
+def build_habit_edit_menu_text(habit_card: HabitCard) -> str:
+    reminder_text = (
+        habit_card.reminder_time.strftime("%H:%M")
+        if habit_card.reminder_enabled and habit_card.reminder_time is not None
+        else "выключено"
+    )
+
+    lines = [
+        f"✏️ Редактирование «{html.quote(habit_card.title)}»",
+        "",
+        f"Частота: {habit_card.frequency_text}",
+        f"Напоминание: {reminder_text}",
+    ]
+
+    if habit_card.goal is None:
+        lines.append("Цель: не задана")
+    else:
+        lines.append(f"Цель: {habit_card.goal.goal_text}")
+        lines.append(f"Прогресс цели: {habit_card.goal.progress_text}")
+        if habit_card.goal.status_text is not None:
+            lines.append(f"Результат: {habit_card.goal.status_text}")
+
+    lines.extend(
+        [
+            "",
+            "Выбери, что хочешь изменить.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def build_habit_stats_text(stats: HabitStats) -> str:
     today_due_text = "да" if stats.is_due_today else "нет"
     today_done_text = "да" if stats.is_completed_today else "нет"

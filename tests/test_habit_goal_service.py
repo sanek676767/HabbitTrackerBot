@@ -29,6 +29,30 @@ def test_goal_by_completions_counts_total_completions() -> None:
     assert progress.is_achieved is False
 
 
+def test_goal_by_completions_ignores_future_completion_dates() -> None:
+    habit = make_habit(
+        goal_type="completions",
+        goal_target_value=5,
+        start_date=date(2026, 4, 1),
+    )
+    completion_dates = {
+        date(2026, 4, 1),
+        date(2026, 4, 2),
+        date(2026, 4, 10),
+    }
+
+    progress = HabitGoalService.calculate_progress(
+        habit,
+        completion_dates,
+        date(2026, 4, 2),
+    )
+
+    assert progress is not None
+    assert progress.current_value == 2
+    assert progress.progress_text == "2 / 5"
+    assert progress.is_achieved is False
+
+
 def test_goal_by_streak_uses_schedule_aware_current_streak() -> None:
     habit = make_habit(
         frequency_type="interval",
