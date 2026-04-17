@@ -1,3 +1,5 @@
+"""Хелперы доступа к данным привычек и связанных метаданных."""
+
 from datetime import date, datetime, time, timezone
 
 from sqlalchemy import func, select
@@ -145,6 +147,8 @@ class HabitRepository:
     async def restore_soft_deleted_habit(self, habit: Habit) -> Habit:
         habit.is_deleted = False
         habit.deleted_at = None
+        # Восстановленные привычки возвращаются в архив, чтобы пользователь
+        # сам явно решил, когда снова сделать их активными.
         habit.is_active = False
         await self._session.flush()
         return habit
@@ -222,6 +226,8 @@ class HabitRepository:
             .options(selectinload(Habit.user))
             .join(Habit.user)
             .where(
+                # Сразу отфильтровываем всё, что точно не может дать напоминание,
+                # чтобы сервисный слой проверял только релевантные записи.
                 Habit.is_active.is_(True),
                 Habit.is_deleted.is_(False),
                 Habit.reminder_enabled.is_(True),

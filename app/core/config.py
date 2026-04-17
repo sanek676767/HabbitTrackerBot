@@ -1,3 +1,5 @@
+"""Настройки приложения и производные URL для подключений."""
+
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -5,6 +7,8 @@ from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
+    """Централизованные настройки, загружаемые из окружения и `.env`."""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -39,6 +43,8 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
+        """Асинхронный URL SQLAlchemy для работающего приложения."""
+
         return URL.create(
             drivername="postgresql+asyncpg",
             username=self.postgres_user,
@@ -50,6 +56,8 @@ class Settings(BaseSettings):
 
     @property
     def alembic_database_url(self) -> str:
+        """URL для Alembic-миграций, совместимый с синхронным драйвером."""
+
         return URL.create(
             drivername="postgresql+psycopg",
             username=self.postgres_user,
@@ -61,14 +69,20 @@ class Settings(BaseSettings):
 
     @property
     def redis_url(self) -> str:
+        """База Redis по умолчанию, которую использует само приложение."""
+
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     @property
     def celery_broker_url(self) -> str:
+        """Отдельная база Redis, используемая как брокер Celery."""
+
         return f"redis://{self.redis_host}:{self.redis_port}/{self.celery_broker_db}"
 
     @property
     def celery_result_backend(self) -> str:
+        """Отдельная база Redis для результатов задач Celery."""
+
         return f"redis://{self.redis_host}:{self.redis_port}/{self.celery_result_db}"
 
 

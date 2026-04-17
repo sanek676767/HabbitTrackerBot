@@ -1,3 +1,5 @@
+"""Хелперы жизненного цикла пользователя и работы с часовыми поясами."""
+
 import re
 from datetime import datetime, time, timezone
 
@@ -85,6 +87,8 @@ class UserService:
         utc_datetime = reference_utc_datetime or datetime.now(timezone.utc)
         utc_time = utc_datetime.astimezone(timezone.utc).time()
 
+        # Бот просит у пользователя его текущее локальное время и по нему
+        # вычисляет UTC-смещение относительно текущего серверного UTC.
         utc_offset_minutes = self._calculate_utc_offset_minutes(local_time, utc_time)
         await self._user_repository.update_utc_offset_minutes(user, utc_offset_minutes)
         await self._session.commit()
@@ -126,6 +130,8 @@ class UserService:
         utc_total_minutes = utc_time.hour * 60 + utc_time.minute
         offset_minutes = local_total_minutes - utc_total_minutes
 
+        # Нормализуем разницу через переходы полуночи в реальный диапазон
+        # часовых поясов, например 01:00 локально и 23:00 UTC дают +02:00.
         while offset_minutes < MIN_UTC_OFFSET_MINUTES:
             offset_minutes += MINUTES_IN_DAY
 

@@ -1,3 +1,5 @@
+"""Хелперы доступа к данным записей журнала действий администратора."""
+
 from typing import Any
 
 from sqlalchemy import func, select

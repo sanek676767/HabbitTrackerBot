@@ -1,3 +1,5 @@
+"""Ленивое управление Redis-клиентом для API, бота и воркеров."""
+
 from redis.asyncio import Redis
 
 from app.core.config import settings
@@ -10,6 +12,8 @@ def get_redis() -> Redis:
     global _redis_client
 
     if _redis_client is None:
+        # Переиспользуем один асинхронный клиент на процесс, а не
+        # переподключаемся заново при каждом ping или вызове команды.
         _redis_client = Redis.from_url(
             settings.redis_url,
             encoding="utf-8",

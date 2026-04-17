@@ -1,3 +1,5 @@
+"""Модель ORM для журнала действий администратора."""
+
 from typing import Any
 
 from sqlalchemy import BigInteger, ForeignKey, Index, JSON, String

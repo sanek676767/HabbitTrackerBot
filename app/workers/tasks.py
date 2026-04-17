@@ -1,3 +1,5 @@
+"""Обёртки Celery-задач вокруг асинхронных диспетчеров напоминаний и сводок."""
+
 import asyncio
 from datetime import datetime, timezone
 
@@ -30,6 +32,8 @@ def dispatch_progress_summaries() -> dict[str, int]:
 
 
 async def _dispatch_habit_reminders() -> dict[str, int]:
+    # Каждая задача создаёт собственный короткоживущий экземпляр бота,
+    # чтобы воркеры не делили Telegram-сессии между процессами.
     bot = Bot(
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

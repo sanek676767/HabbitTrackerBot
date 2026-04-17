@@ -1,3 +1,5 @@
+"""Модель ORM для привычек, напоминаний и целей прогресса."""
+
 from datetime import date, datetime, time
 from enum import Enum
 
@@ -8,12 +10,16 @@ from app.models.base import Base, CreatedAtMixin, IdMixin, UpdatedAtMixin
 
 
 class HabitFrequencyType(str, Enum):
+    """Поддерживаемые режимы расписания привычек."""
+
     DAILY = "daily"
     INTERVAL = "interval"
     WEEKDAYS = "weekdays"
 
 
 class HabitGoalType(str, Enum):
+    """Поддерживаемые типы целей для привычки."""
+
     COMPLETIONS = "completions"
     STREAK = "streak"
 

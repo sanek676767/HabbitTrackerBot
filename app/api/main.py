@@ -1,3 +1,5 @@
+"""Точка входа FastAPI-приложения."""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,6 +14,7 @@ from app.core.redis import close_redis, get_redis
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging()
+    # На старте сразу завершаемся с ошибкой, если инфраструктура недоступна.
     await check_database_connection()
     if settings.redis_enabled:
         await get_redis().ping()

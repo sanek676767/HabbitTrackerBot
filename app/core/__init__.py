@@ -1,1 +1,1 @@
-"""Core application infrastructure."""
+"""Пакет базовой инфраструктуры приложения."""

@@ -1,1 +1,1 @@
-"""Application package."""
+"""Пакет приложения Habit Tracker Bot."""

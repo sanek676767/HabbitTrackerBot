@@ -1,3 +1,5 @@
+"""Резервный внутрипроцессный цикл для напоминаний и сводок."""
+
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -26,6 +28,8 @@ async def run_inline_reminder_loop(
 
         if current_utc_minute != last_checked_minute:
             try:
+                # Отправляем не чаще одного раза в нормализованную минуту,
+                # чтобы короткий интервал опроса не создавал дубли.
                 reminder_result = await dispatch_due_reminders(bot, current_utc_minute)
                 summary_result = await dispatch_due_summaries(bot, current_utc_minute)
 

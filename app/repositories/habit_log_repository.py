@@ -1,3 +1,5 @@
+"""Хелперы доступа к данным логов выполнения привычек."""
+
 from datetime import date
 
 from sqlalchemy import func, select

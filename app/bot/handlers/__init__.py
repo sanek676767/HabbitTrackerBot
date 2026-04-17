@@ -1,3 +1,5 @@
+"""Собирает роутеры бота в порядке их подключения к диспетчеру."""
+
 from app.bot.handlers.admin import router as admin_router
 from app.bot.handlers.create_habit import router as create_habit_router
 from app.bot.handlers.edit_habit import router as edit_habit_router

@@ -1,3 +1,5 @@
+"""Модель ORM для пользовательской обратной связи и ответов администратора."""
+
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Text, text

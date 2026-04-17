@@ -1,3 +1,5 @@
+"""Модель ORM для ежедневных отметок выполнения привычек."""
+
 from datetime import date
 
 from sqlalchemy import Date, ForeignKey, UniqueConstraint

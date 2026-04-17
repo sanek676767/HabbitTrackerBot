@@ -1,3 +1,5 @@
+"""Тесты условий отправки сводок и защиты от дублей."""
+
 from datetime import date, time
 
 from app.bot.summary_dispatcher import (

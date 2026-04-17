@@ -1,3 +1,5 @@
+"""Хелперы доступа к данным сообщений обратной связи."""
+
 from datetime import datetime
 
 from sqlalchemy import func, select

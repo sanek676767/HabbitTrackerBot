@@ -1,3 +1,5 @@
+"""Хелперы доступа к данным пользователей."""
+
 from datetime import date
 
 from sqlalchemy import String, cast, exists, func, or_, select
@@ -75,6 +77,8 @@ class UserRepository:
         statement = (
             select(User)
             .where(
+                # Пропускаем заблокированных пользователей и тех, у кого нет
+                # активных привычек, чтобы периодический обход был дешевле.
                 User.is_blocked.is_(False),
                 active_habits_exists,
             )

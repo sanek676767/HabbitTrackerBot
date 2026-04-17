@@ -1,3 +1,5 @@
+"""Валидация целей и расчёт прогресса по привычкам."""
+
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
@@ -125,6 +127,8 @@ class HabitGoalService:
 
         achieved_at = getattr(habit, "goal_achieved_at", None)
         if achieved_at is not None:
+            # После достижения цели сохраняем исходную временную метку, а не
+            # передвигаем его при каждом следующем пересчёте.
             return achieved_at
 
         return now or datetime.now(timezone.utc)

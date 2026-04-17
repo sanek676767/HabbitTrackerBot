@@ -1,3 +1,5 @@
+"""Удобные экспорты для слоя ORM-моделей."""
+
 from app.models.admin_action_log import AdminActionLog
 from app.models.base import Base
 from app.models.feedback_message import FeedbackMessage

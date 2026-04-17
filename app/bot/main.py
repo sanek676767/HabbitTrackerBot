@@ -1,3 +1,5 @@
+"""Точка входа Telegram-бота и инициализация polling."""
+
 import asyncio
 import logging
 from contextlib import suppress
@@ -52,6 +54,8 @@ async def main() -> None:
     reminder_stop_event = asyncio.Event()
     reminder_task = None
     if not settings.redis_enabled:
+        # Для локальной разработки можно работать без Redis/Celery; в этом
+        # режиме бот сам проверяет напоминания и сводки внутри процесса.
         reminder_task = asyncio.create_task(
             run_inline_reminder_loop(bot, reminder_stop_event)
         )

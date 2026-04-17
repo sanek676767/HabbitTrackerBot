@@ -1,3 +1,5 @@
+"""Промежуточный слой, который добавляет сессию БД и сервисы на время одного обновления."""
+
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -26,6 +28,8 @@ class DbSessionMiddleware(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         async with async_session_factory() as session:
+            # Все репозитории и сервисы внутри одного Telegram-обновления
+            # используют одну сессию и видят единое состояние транзакции.
             user_repository = UserRepository(session)
             habit_repository = HabitRepository(session)
             habit_log_repository = HabitLogRepository(session)

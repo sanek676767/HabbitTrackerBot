@@ -1,3 +1,5 @@
+"""Публичные классы данных колбэков, переэкспортируемые для всего слоя бота."""
+
 from app.bot.callbacks.admin import (
     AdminActionLogCallback,
     AdminDashboardCallback,

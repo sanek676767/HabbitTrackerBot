@@ -1,3 +1,5 @@
+"""Форматирование и проверка доступа для журнала админ-действий."""
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -334,6 +336,8 @@ class AdminActionLogService:
 
         items: list[AdminActionLogDetailItem] = []
         used_keys: set[str] = set()
+        # Самые важные поля показываем первыми, чтобы карточка журнала
+        # читалась естественно и без лишних прыжков по тексту.
         for key in ("habit_title", "feedback_preview", "feedback_reply_text"):
             value = details_json.get(key)
             if value is None:

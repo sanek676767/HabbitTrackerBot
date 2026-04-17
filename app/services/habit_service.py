@@ -1,3 +1,5 @@
+"""Основные операции над привычками и расчёт прогресса по ним."""
+
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
@@ -343,6 +345,8 @@ class HabitService:
             raise HabitArchivedError("Архивную привычку нельзя отметить.")
 
         today = self._get_today()
+        # Отметка выполнения зависит от расписания: привычку можно закрыть
+        # только в те даты, когда она реально запланирована.
         if not HabitScheduleService.is_habit_due_on_date(habit, today):
             raise HabitNotDueTodayError("Сегодня эта привычка не запланирована.")
 
@@ -356,6 +360,8 @@ class HabitService:
                 datetime.now(timezone.utc),
             )
             completion_dates = await self._habit_log_repository.get_completion_dates(habit.id)
+            # Состояние цели пересчитываем сразу, чтобы интерфейс показывал
+            # актуальный прогресс без дополнительного цикла чтения.
             await self._sync_goal_achievement(
                 habit,
                 completion_dates=completion_dates,
@@ -598,6 +604,8 @@ class HabitService:
             resolved_completion_dates,
             resolved_target_date,
         )
+        # Сохраняем вычисленный момент достижения цели прямо в привычке,
+        # чтобы карточки, напоминания и аналитика читали одно состояние.
         achieved_at = HabitGoalService.resolve_goal_achieved_at(habit, progress)
         if achieved_at != habit.goal_achieved_at:
             await self._habit_repository.update_goal_achieved_at(habit, achieved_at)
@@ -615,6 +623,8 @@ class HabitService:
         lines: list[str] = []
         for day in days:
             if HabitScheduleService.is_habit_due_on_date(habit, day):
+                # Различаем "пропущено" и "не запланировано", чтобы пользователь
+                # видел, где действительно есть сбой, а где просто свободный день.
                 marker = "✅" if day in completion_dates else "⬜"
             else:
                 marker = "—"

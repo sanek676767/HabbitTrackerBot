@@ -1,3 +1,5 @@
+"""Валидация расписаний и расчёт серий по привычкам."""
+
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -81,6 +83,7 @@ class HabitScheduleService:
 
         if schedule.frequency_type == cls.INTERVAL:
             interval = schedule.frequency_interval or cls.EVERY_OTHER_DAY_INTERVAL
+            # Интервальные расписания привязаны к `start_date`.
             return (target_date - schedule.start_date).days % interval == 0
 
         if schedule.frequency_type == cls.WEEKDAYS:
@@ -248,6 +251,8 @@ class HabitScheduleService:
 
     @classmethod
     def build_week_days_mask(cls, week_days: list[int] | set[int]) -> int:
+        # Расписания по дням недели хранятся как компактная битовая маска,
+        # чтобы и модель, и представление в БД оставались простыми.
         mask = 0
         for day_index in sorted(week_days):
             if day_index < 0 or day_index > 6:

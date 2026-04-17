@@ -1,3 +1,5 @@
+"""Логика расписания напоминаний с учётом локального времени пользователя."""
+
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 
@@ -37,6 +39,8 @@ class ReminderService:
             if habit.reminder_time is None:
                 continue
 
+            # Напоминания хранятся в локальном времени пользователя, поэтому
+            # каждую привычку сравниваем с локализованной минутой пользователя.
             user_local_datetime = self.get_user_local_datetime(
                 normalized_utc_datetime,
                 habit.user.utc_offset_minutes,
@@ -53,6 +57,8 @@ class ReminderService:
             if not HabitScheduleService.is_habit_due_on_date(habit, user_local_date):
                 continue
 
+            # Уже выполненная привычка не должна получать напоминание
+            # повторно в тот же день.
             is_completed_today = await self._habit_log_repository.is_completed_for_date(
                 habit.id,
                 user_local_date,

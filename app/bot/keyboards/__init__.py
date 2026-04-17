@@ -1,3 +1,5 @@
+"""Публичные хелперы клавиатур, переэкспортируемые для хендлеров и диспетчеров."""
+
 from app.bot.keyboards.create_habit import (
     get_create_habit_cancel_keyboard,
     get_create_habit_confirm_keyboard,

@@ -1,3 +1,5 @@
+"""Агрегированные метрики прогресса для экранов и сводок."""
+
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -324,6 +326,8 @@ class ProgressService:
             habit = habit_map.get(habit_id)
             if habit is None:
                 continue
+            # В расчёт процентов и недельных сводок попадают только те
+            # выполнения, которые пришлись на реально запланированные дни.
             if not HabitScheduleService.is_habit_due_on_date(habit, completed_for_date):
                 continue
             completion_count_map[habit_id] += 1

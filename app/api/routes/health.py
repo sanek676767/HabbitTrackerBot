@@ -1,3 +1,5 @@
+"""Служебные маршруты для проверки состояния инфраструктуры."""
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -17,6 +19,8 @@ async def healthcheck() -> JSONResponse:
     status_code = 200
 
     try:
+        # Небольшого запроса достаточно, чтобы убедиться, что фабрика сессий
+        # и пул соединений работают корректно.
         async with async_session_factory() as session:
             await session.execute(text("SELECT 1"))
     except Exception:

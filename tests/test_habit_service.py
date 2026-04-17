@@ -1,3 +1,5 @@
+"""Тесты основных сценариев и пограничных случаев сервиса привычек."""
+
 from datetime import date, datetime, time, timezone
 
 import pytest

@@ -1,3 +1,5 @@
+"""Приём обратной связи, админский просмотр и хелперы для ответов."""
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING

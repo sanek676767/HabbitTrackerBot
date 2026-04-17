@@ -1,3 +1,5 @@
+"""Конфигурация логирования, общая для всех точек входа."""
+
 import logging
 
 from app.core.config import settings

@@ -1,3 +1,5 @@
+"""Общие тестовые заглушки и фабрики объектов."""
+
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
@@ -20,6 +22,8 @@ class DummySession:
 
 def make_habit(**overrides: object) -> SimpleNamespace:
     created_at = datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc)
+    # Значения по умолчанию делают тесты компактнее, но при этом создают
+    # объект, у которого есть все атрибуты, нужные сервисам.
     defaults = {
         "id": 1,
         "user_id": 1,
@@ -44,6 +48,8 @@ def make_habit(**overrides: object) -> SimpleNamespace:
 
 
 def make_user(**overrides: object) -> SimpleNamespace:
+    # Тестовые пользователи повторяют форму объектов, которую ждут сервисы
+    # и промежуточные слои, но не требуют настоящих ORM-экземпляров.
     defaults = {
         "id": 1,
         "telegram_id": 123456,

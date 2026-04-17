@@ -1,3 +1,5 @@
+"""Административные операции над пользователями, привычками и дашбордом."""
+
 from dataclasses import dataclass
 from datetime import datetime, time
 from typing import TYPE_CHECKING

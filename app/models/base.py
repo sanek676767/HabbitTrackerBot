@@ -1,3 +1,5 @@
+"""Общие базовые классы SQLAlchemy и примеси."""
+
 from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, Identity, MetaData, func
@@ -19,6 +21,8 @@ class Base(AsyncAttrs, DeclarativeBase):
 
 
 class IdMixin:
+    """Добавляет bigint-первичный ключ с `Identity`."""
+
     id: Mapped[int] = mapped_column(
         BigInteger,
         Identity(),
@@ -27,6 +31,8 @@ class IdMixin:
 
 
 class CreatedAtMixin:
+    """Добавляет временную метку создания с часовым поясом."""
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -35,6 +41,8 @@ class CreatedAtMixin:
 
 
 class UpdatedAtMixin:
+    """Добавляет временную метку обновления с часовым поясом."""
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

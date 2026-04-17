@@ -1,3 +1,5 @@
+"""Слой отправки уведомлений-напоминаний."""
+
 import logging
 from datetime import datetime, timezone
 
@@ -17,6 +19,8 @@ async def dispatch_due_reminders(
     bot: Bot,
     current_utc_datetime: datetime | None = None,
 ) -> dict[str, int]:
+    """Находит актуальные напоминания и отправляет их по одному через Telegram."""
+
     normalized_utc_datetime = ReminderService.normalize_utc_datetime(
         current_utc_datetime or datetime.now(timezone.utc)
     )
@@ -44,6 +48,8 @@ async def dispatch_due_reminders(
             )
             sent_count += 1
         except Exception:
+            # Сбой при отправке одного сообщения не должен останавливать
+            # доставку остальных напоминаний из той же пачки.
             logger.exception(
                 "Failed to send reminder for habit_id=%s telegram_id=%s",
                 reminder.habit_id,

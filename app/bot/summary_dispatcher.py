@@ -1,3 +1,5 @@
+"""Отправка пользователям ежедневных и еженедельных сводок прогресса."""
+
 import logging
 from datetime import date, datetime, time, timedelta
 
@@ -23,6 +25,8 @@ async def dispatch_due_summaries(
     bot: Bot,
     current_utc_datetime: datetime | None = None,
 ) -> dict[str, int]:
+    """Отправляет сводки только тогда, когда они должны уйти по локальному времени пользователя."""
+
     normalized_utc_datetime = ReminderService.normalize_utc_datetime(current_utc_datetime)
 
     async with async_session_factory() as session:
@@ -42,6 +46,8 @@ async def dispatch_due_summaries(
                 normalized_utc_datetime,
                 user.utc_offset_minutes,
             )
+            # И расписание, и защита от дублей считаются в локальных дате
+            # и времени пользователя, а не по серверному времени.
             user_local_date = user_local_datetime.date()
             user_local_time = time(user_local_datetime.hour, user_local_datetime.minute)
             week_start = _get_week_start(user_local_date)
@@ -191,6 +197,8 @@ def _should_send_daily_summary(
     current_local_date: date,
     last_sent_for_date: date | None,
 ) -> bool:
+    # Сохранённая дата последней отправки не даёт слать дубли, если
+    # диспетчер отработает несколько раз в одну и ту же минуту.
     return (
         current_local_time == DAILY_SUMMARY_TRIGGER_TIME
         and last_sent_for_date != current_local_date
@@ -203,6 +211,8 @@ def _should_send_weekly_summary(
     last_sent_for_week_start: date | None,
 ) -> bool:
     week_start = _get_week_start(current_local_date)
+    # Недельные сводки привязаны к началу недели, а не к конкретной дате,
+    # поэтому повторные прогоны в пределах недели остаются идемпотентными.
     return (
         current_local_time == WEEKLY_SUMMARY_TRIGGER_TIME
         and current_local_date.weekday() == WEEKLY_SUMMARY_WEEKDAY

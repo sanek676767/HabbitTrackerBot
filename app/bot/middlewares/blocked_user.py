@@ -1,3 +1,5 @@
+"""Промежуточный слой, который не пускает заблокированных пользователей в бота."""
+
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -52,6 +54,8 @@ class BlockedUserMiddleware(BaseMiddleware):
 
     @staticmethod
     async def _load_user(telegram_id: int):
+        # Этот промежуточный слой работает отдельно от основного инжектора сессии,
+        # поэтому для проверки доступа открывает отдельную короткую сессию.
         async with async_session_factory() as session:
             user_service = UserService(
                 session=session,

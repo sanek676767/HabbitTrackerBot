@@ -1,3 +1,5 @@
+"""Модель ORM для пользователей Telegram и связанных с привычками метаданных."""
+
 from datetime import date, datetime
 from decimal import Decimal
 

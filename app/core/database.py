@@ -1,3 +1,5 @@
+"""Движок БД, фабрика сессий и хелперы для проверки соединения."""
+
 from collections.abc import AsyncIterator
 
 from sqlalchemy import text
@@ -24,6 +26,8 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
         try:
             yield session
         except Exception:
+            # Делаем такие сессии безопаснее, даже если вызывающая
+            # сторона явно не обработала откат транзакции.
             await session.rollback()
             raise
 
