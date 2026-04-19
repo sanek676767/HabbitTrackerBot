@@ -45,6 +45,7 @@ class UserService:
                 first_name=first_name,
                 last_name=last_name,
             )
+            await self._user_repository.touch_last_interaction(user)
             await self._session.commit()
             await self._session.refresh(user)
             return user, True
@@ -68,6 +69,14 @@ class UserService:
 
     async def get_by_telegram_id(self, telegram_id: int) -> User | None:
         return await self._user_repository.get_by_telegram_id(telegram_id)
+
+    async def touch_last_interaction(self, telegram_id: int) -> None:
+        user = await self._user_repository.get_by_telegram_id(telegram_id)
+        if user is None:
+            return
+
+        await self._user_repository.touch_last_interaction(user)
+        await self._session.commit()
 
     async def should_show_admin_entry_by_telegram_id(self, telegram_id: int) -> bool:
         user = await self.get_by_telegram_id(telegram_id)

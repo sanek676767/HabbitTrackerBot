@@ -1,6 +1,6 @@
 """Хелперы доступа к данным пользователей."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy import String, cast, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -87,6 +87,39 @@ class UserRepository:
         result = await self._session.scalars(statement)
         return list(result)
 
+    async def get_users_for_broadcast(
+        self,
+        *,
+        interacted_since: datetime,
+    ) -> list[User]:
+        has_not_deleted_habits = exists(
+            select(Habit.id).where(
+                Habit.user_id == User.id,
+                Habit.is_deleted.is_(False),
+            )
+        )
+        statement = (
+            select(User)
+            .where(
+                User.is_blocked.is_(False),
+                User.last_interaction_at.is_not(None),
+                User.last_interaction_at >= interacted_since,
+                has_not_deleted_habits,
+            )
+            .order_by(User.id.asc())
+        )
+        result = await self._session.scalars(statement)
+        return list(result)
+
+    async def get_all_unblocked_users(self) -> list[User]:
+        statement = (
+            select(User)
+            .where(User.is_blocked.is_(False))
+            .order_by(User.id.asc())
+        )
+        result = await self._session.scalars(statement)
+        return list(result)
+
     async def search_users(
         self,
         query: str,
@@ -140,6 +173,11 @@ class UserRepository:
         week_start: date,
     ) -> User:
         user.last_weekly_summary_sent_for_week_start = week_start
+        await self._session.flush()
+        return user
+
+    async def touch_last_interaction(self, user: User) -> User:
+        user.last_interaction_at = datetime.now(timezone.utc)
         await self._session.flush()
         return user
 

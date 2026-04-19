@@ -42,3 +42,7 @@ class AdminDeletedHabitActionCallback(CallbackData, prefix="admin_deleted_habit"
     habit_id: int
     page: int
     scope: str
+
+
+class AdminBroadcastCallback(CallbackData, prefix="admin_broadcast"):
+    action: str

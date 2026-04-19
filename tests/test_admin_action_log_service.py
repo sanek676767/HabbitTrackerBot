@@ -130,3 +130,38 @@ async def test_get_log_card_formats_details_for_feedback_reply() -> None:
         ("Текст обращения", "Не приходит напоминание"),
         ("Текст ответа", "Проверили и исправили."),
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_log_card_formats_details_for_broadcast() -> None:
+    service, repository, admin_user, _ = build_service()
+    await repository.create_log(
+        actor_user_id=admin_user.id,
+        action_type="send_broadcast",
+        entity_type="broadcast",
+        details_json={
+            "broadcast_type": "photo",
+            "audience_type": "all",
+            "audience_summary": "Все не заблокированные пользователи, у которых есть запись в базе.",
+            "recipients_count": 5,
+            "sent_count": 4,
+            "failed_count": 1,
+            "text_preview": "Новая неделя, новый ритм",
+            "photo_file_id": "photo-file-id-1",
+        },
+    )
+
+    card = await service.get_log_card(admin_user.telegram_id, 1)
+
+    assert card.action_text == "отправил рассылку"
+    assert card.entity_text == "рассылка"
+    assert [(item.label, item.value) for item in card.details] == [
+        ("Тип", "photo"),
+        ("Тип аудитории", "all"),
+        ("Аудитория", "Все не заблокированные пользователи, у которых есть запись в базе."),
+        ("Получателей", "5"),
+        ("Отправлено", "4"),
+        ("Не доставлено", "1"),
+        ("Превью текста", "Новая неделя, новый ритм"),
+        ("File ID картинки", "photo-file-id-1"),
+    ]

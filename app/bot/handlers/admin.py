@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from app.bot.callbacks import (
     AdminActionLogCallback,
+    AdminBroadcastCallback,
     AdminDashboardCallback,
     AdminDeletedHabitActionCallback,
     AdminFeedbackActionCallback,
@@ -20,6 +21,11 @@ from app.bot.keyboards import (
     ALL_MAIN_MENU_BUTTONS,
     get_admin_action_log_card_keyboard,
     get_admin_action_log_list_keyboard,
+    get_admin_broadcast_audience_keyboard,
+    get_admin_broadcast_confirmation_keyboard,
+    get_admin_broadcast_format_keyboard,
+    get_admin_broadcast_input_cancel_keyboard,
+    get_admin_broadcast_result_keyboard,
     get_admin_dashboard_keyboard,
     get_admin_feedback_card_keyboard,
     get_admin_feedback_list_keyboard,
@@ -50,6 +56,17 @@ from app.services.admin_service import (
     AdminUserNotFoundError,
     AdminUsersPage,
 )
+from app.services.broadcast_service import (
+    BROADCAST_AUDIENCE_ACTIVE,
+    BROADCAST_AUDIENCE_ALL,
+    BROADCAST_TYPE_PHOTO,
+    BROADCAST_TYPE_TEXT,
+    BroadcastAccessDeniedError,
+    BroadcastPreview,
+    BroadcastResult,
+    BroadcastService,
+    BroadcastValidationError,
+)
 from app.services.feedback_service import (
     FeedbackAccessDeniedError,
     FeedbackCard,
@@ -74,6 +91,10 @@ USER_DELETED_SECTION = "udel"
 class AdminStates(StatesGroup):
     waiting_for_user_query = State()
     waiting_for_feedback_reply = State()
+    waiting_for_broadcast_text = State()
+    waiting_for_broadcast_photo = State()
+    waiting_for_broadcast_caption = State()
+    waiting_for_broadcast_confirmation = State()
 
 
 @router.message(Command("admin"))
@@ -188,6 +209,295 @@ async def handle_admin_page_callback(
         return
 
     await callback.answer()
+
+
+@router.callback_query(AdminBroadcastCallback.filter())
+async def handle_admin_broadcast_callback(
+    callback: CallbackQuery,
+    callback_data: AdminBroadcastCallback,
+    state: FSMContext,
+    admin_service: AdminService,
+    broadcast_service: BroadcastService,
+) -> None:
+    if callback.from_user is None or callback.message is None:
+        await callback.answer()
+        return
+
+    try:
+        if callback_data.action in {"open", "edit"}:
+            await admin_service.get_dashboard(callback.from_user.id)
+            await state.clear()
+            await state.update_data(
+                prompt_chat_id=callback.message.chat.id,
+                prompt_message_id=callback.message.message_id,
+            )
+            await callback.message.edit_text(
+                _build_broadcast_audience_prompt_text(),
+                reply_markup=get_admin_broadcast_audience_keyboard(),
+            )
+            await callback.answer()
+            return
+
+        if callback_data.action in {"audience_active", "audience_all"}:
+            await admin_service.get_dashboard(callback.from_user.id)
+            audience_type = (
+                BROADCAST_AUDIENCE_ALL
+                if callback_data.action == "audience_all"
+                else BROADCAST_AUDIENCE_ACTIVE
+            )
+            await state.update_data(
+                broadcast_audience_type=audience_type,
+                broadcast_type=None,
+                broadcast_text=None,
+                broadcast_photo_file_id=None,
+                prompt_chat_id=callback.message.chat.id,
+                prompt_message_id=callback.message.message_id,
+            )
+            await callback.message.edit_text(
+                _build_broadcast_format_prompt_text(),
+                reply_markup=get_admin_broadcast_format_keyboard(),
+            )
+            await callback.answer()
+            return
+
+        if callback_data.action == "format_text":
+            await admin_service.get_dashboard(callback.from_user.id)
+            state_data = await state.get_data()
+            audience_type = state_data.get("broadcast_audience_type")
+            if not isinstance(audience_type, str):
+                await state.clear()
+                await callback.answer(
+                    "Не удалось определить аудиторию рассылки. Начни заново.",
+                    show_alert=True,
+                )
+                return
+
+            await state.set_state(AdminStates.waiting_for_broadcast_text)
+            await state.update_data(
+                broadcast_audience_type=audience_type,
+                broadcast_type=BROADCAST_TYPE_TEXT,
+                broadcast_text=None,
+                broadcast_photo_file_id=None,
+                prompt_chat_id=callback.message.chat.id,
+                prompt_message_id=callback.message.message_id,
+            )
+            await callback.message.edit_text(
+                _build_broadcast_text_input_prompt_text(),
+                reply_markup=get_admin_broadcast_input_cancel_keyboard(),
+            )
+            await callback.answer()
+            return
+
+        if callback_data.action == "format_photo":
+            await admin_service.get_dashboard(callback.from_user.id)
+            state_data = await state.get_data()
+            audience_type = state_data.get("broadcast_audience_type")
+            if not isinstance(audience_type, str):
+                await state.clear()
+                await callback.answer(
+                    "Не удалось определить аудиторию рассылки. Начни заново.",
+                    show_alert=True,
+                )
+                return
+
+            await state.set_state(AdminStates.waiting_for_broadcast_photo)
+            await state.update_data(
+                broadcast_audience_type=audience_type,
+                broadcast_type=BROADCAST_TYPE_PHOTO,
+                broadcast_text=None,
+                broadcast_photo_file_id=None,
+                prompt_chat_id=callback.message.chat.id,
+                prompt_message_id=callback.message.message_id,
+            )
+            await callback.message.edit_text(
+                _build_broadcast_photo_input_prompt_text(),
+                reply_markup=get_admin_broadcast_input_cancel_keyboard(),
+            )
+            await callback.answer()
+            return
+
+        if callback_data.action == "cancel":
+            dashboard = await admin_service.get_dashboard(callback.from_user.id)
+            await state.clear()
+            await callback.message.edit_text(
+                _build_dashboard_text(dashboard),
+                reply_markup=get_admin_dashboard_keyboard(
+                    unread_feedback_count=dashboard.unread_feedback_count,
+                ),
+            )
+            await callback.answer()
+            return
+
+        if callback_data.action != "send":
+            await callback.answer()
+            return
+
+        state_data = await state.get_data()
+        broadcast_audience_type = state_data.get("broadcast_audience_type")
+        broadcast_type = state_data.get("broadcast_type")
+        broadcast_text = state_data.get("broadcast_text")
+        broadcast_photo_file_id = state_data.get("broadcast_photo_file_id")
+
+        if (
+            not isinstance(broadcast_audience_type, str)
+            or not isinstance(broadcast_type, str)
+            or not isinstance(broadcast_text, str)
+        ):
+            await state.clear()
+            await callback.answer(
+                "Не удалось продолжить рассылку. Начни заново.",
+                show_alert=True,
+            )
+            return
+
+        await callback.answer("Рассылка отправляется…")
+        result = await broadcast_service.send_broadcast(
+            callback.from_user.id,
+            bot=callback.bot,
+            audience_type=broadcast_audience_type,
+            broadcast_type=broadcast_type,
+            text=broadcast_text,
+            photo_file_id=(
+                broadcast_photo_file_id
+                if isinstance(broadcast_photo_file_id, str)
+                else None
+            ),
+        )
+        await state.clear()
+        await callback.message.edit_text(
+            _build_broadcast_result_text(result),
+            reply_markup=get_admin_broadcast_result_keyboard(),
+        )
+    except AdminAccessDeniedError as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+    except (BroadcastAccessDeniedError, BroadcastValidationError) as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+
+
+@router.message(AdminStates.waiting_for_broadcast_text)
+async def receive_admin_broadcast_text(
+    message: Message,
+    state: FSMContext,
+    broadcast_service: BroadcastService,
+) -> None:
+    if message.from_user is None:
+        await message.answer("Не удалось определить пользователя.")
+        return
+
+    if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
+        await message.answer(
+            "Пришли текст рассылки одним сообщением или нажми «Отмена» под сообщением."
+        )
+        return
+
+    if message.text is None:
+        await message.answer("Пришли текст рассылки одним сообщением.")
+        return
+
+    await _prepare_broadcast_confirmation(
+        message=message,
+        state=state,
+        broadcast_service=broadcast_service,
+        broadcast_type=BROADCAST_TYPE_TEXT,
+        text=message.text,
+    )
+
+
+@router.message(AdminStates.waiting_for_broadcast_photo)
+async def receive_admin_broadcast_photo(
+    message: Message,
+    state: FSMContext,
+    broadcast_service: BroadcastService,
+) -> None:
+    if message.from_user is None:
+        await message.answer("Не удалось определить пользователя.")
+        return
+
+    if not message.photo:
+        await message.answer("Пришли одну картинку для рассылки.")
+        return
+
+    photo_file_id = message.photo[-1].file_id
+    caption = (message.caption or "").strip()
+    if caption:
+        await _prepare_broadcast_confirmation(
+            message=message,
+            state=state,
+            broadcast_service=broadcast_service,
+            broadcast_type=BROADCAST_TYPE_PHOTO,
+            text=caption,
+            photo_file_id=photo_file_id,
+        )
+        return
+
+    state_data = await state.get_data()
+    audience_type = state_data.get("broadcast_audience_type")
+    prompt_chat_id = state_data.get("prompt_chat_id")
+    prompt_message_id = state_data.get("prompt_message_id")
+    if (
+        not isinstance(audience_type, str)
+        or not isinstance(prompt_chat_id, int)
+        or not isinstance(prompt_message_id, int)
+    ):
+        await state.clear()
+        await message.answer("Не получилось продолжить рассылку. Открой раздел заново.")
+        return
+
+    await state.set_state(AdminStates.waiting_for_broadcast_caption)
+    await state.update_data(
+        broadcast_type=BROADCAST_TYPE_PHOTO,
+        broadcast_photo_file_id=photo_file_id,
+    )
+    rendered_chat_id, rendered_message_id = await _render_message(
+        bot=message.bot,
+        chat_id=prompt_chat_id,
+        message_id=prompt_message_id,
+        text=_build_broadcast_caption_input_prompt_text(),
+        reply_markup=get_admin_broadcast_input_cancel_keyboard(),
+    )
+    await state.update_data(
+        prompt_chat_id=rendered_chat_id,
+        prompt_message_id=rendered_message_id,
+    )
+
+
+@router.message(AdminStates.waiting_for_broadcast_caption)
+async def receive_admin_broadcast_caption(
+    message: Message,
+    state: FSMContext,
+    broadcast_service: BroadcastService,
+) -> None:
+    if message.from_user is None:
+        await message.answer("Не удалось определить пользователя.")
+        return
+
+    if (message.text or "") in ALL_MAIN_MENU_BUTTONS:
+        await message.answer(
+            "Пришли текст или подпись одним сообщением, либо нажми «Отмена»."
+        )
+        return
+
+    if message.text is None:
+        await message.answer("Пришли подпись для картинки одним сообщением.")
+        return
+
+    state_data = await state.get_data()
+    photo_file_id = state_data.get("broadcast_photo_file_id")
+    if not isinstance(photo_file_id, str):
+        await state.clear()
+        await message.answer("Не получилось продолжить рассылку. Открой раздел заново.")
+        return
+
+    await _prepare_broadcast_confirmation(
+        message=message,
+        state=state,
+        broadcast_service=broadcast_service,
+        broadcast_type=BROADCAST_TYPE_PHOTO,
+        text=message.text,
+        photo_file_id=photo_file_id,
+    )
 
 
 @router.message(AdminStates.waiting_for_user_query)
@@ -617,6 +927,64 @@ async def send_admin_feedback_reply(
     await message.answer("Ответ отправлен.")
 
 
+async def _prepare_broadcast_confirmation(
+    *,
+    message: Message,
+    state: FSMContext,
+    broadcast_service: BroadcastService,
+    broadcast_type: str,
+    text: str,
+    photo_file_id: str | None = None,
+) -> None:
+    if message.from_user is None:
+        await message.answer("Не удалось определить пользователя.")
+        return
+
+    state_data = await state.get_data()
+    audience_type = state_data.get("broadcast_audience_type")
+    prompt_chat_id = state_data.get("prompt_chat_id")
+    prompt_message_id = state_data.get("prompt_message_id")
+    if (
+        not isinstance(audience_type, str)
+        or not isinstance(prompt_chat_id, int)
+        or not isinstance(prompt_message_id, int)
+    ):
+        await state.clear()
+        await message.answer("Не получилось продолжить рассылку. Открой раздел заново.")
+        return
+
+    try:
+        preview = await broadcast_service.prepare_broadcast(
+            message.from_user.id,
+            audience_type=audience_type,
+            broadcast_type=broadcast_type,
+            text=text,
+            photo_file_id=photo_file_id,
+        )
+    except (BroadcastAccessDeniedError, BroadcastValidationError) as error:
+        await message.answer(str(error))
+        return
+
+    await state.set_state(AdminStates.waiting_for_broadcast_confirmation)
+    await state.update_data(
+        broadcast_audience_type=preview.audience_type,
+        broadcast_type=preview.broadcast_type,
+        broadcast_text=preview.text,
+        broadcast_photo_file_id=preview.photo_file_id,
+    )
+    rendered_chat_id, rendered_message_id = await _render_message(
+        bot=message.bot,
+        chat_id=prompt_chat_id,
+        message_id=prompt_message_id,
+        text=_build_broadcast_confirmation_text(preview),
+        reply_markup=get_admin_broadcast_confirmation_keyboard(),
+    )
+    await state.update_data(
+        prompt_chat_id=rendered_chat_id,
+        prompt_message_id=rendered_message_id,
+    )
+
+
 async def _render_admin_page(
     *,
     message: Message,
@@ -724,6 +1092,95 @@ def _build_dashboard_text(dashboard: AdminDashboardData) -> str:
             f"Новых сообщений: {dashboard.unread_feedback_count}",
             "",
             "Выбери нужный раздел ниже.",
+        ]
+    )
+
+
+def _build_broadcast_audience_prompt_text() -> str:
+    return "\n".join(
+        [
+            "📢 Рассылка",
+            "",
+            "Выбери аудиторию рассылки.",
+        ]
+    )
+
+
+def _build_broadcast_format_prompt_text() -> str:
+    return "\n".join(
+        [
+            "📢 Рассылка",
+            "",
+            "Выбери формат рассылки.",
+        ]
+    )
+
+
+def _build_broadcast_text_input_prompt_text() -> str:
+    return "\n".join(
+        [
+            "📢 Рассылка: только текст",
+            "",
+            "Пришли текст рассылки одним сообщением.",
+        ]
+    )
+
+
+def _build_broadcast_photo_input_prompt_text() -> str:
+    return "\n".join(
+        [
+            "📢 Рассылка: текст + картинка",
+            "",
+            "Пришли одну картинку. После этого я попрошу текст или подпись.",
+        ]
+    )
+
+
+def _build_broadcast_caption_input_prompt_text() -> str:
+    return "\n".join(
+        [
+            "📢 Картинка сохранена",
+            "",
+            "Теперь пришли текст или подпись одним сообщением.",
+        ]
+    )
+
+
+def _build_broadcast_confirmation_text(preview: BroadcastPreview) -> str:
+    photo_text = "Да" if preview.has_photo else "Нет"
+    return "\n".join(
+        [
+            "📢 Подтверждение рассылки",
+            "",
+            f"Формат: {preview.format_label}",
+            f"Аудитория: {preview.audience_label}",
+            f"Картинка: {photo_text}",
+            f"Получателей найдено: {preview.recipients_count}",
+            "",
+            "Описание аудитории:",
+            preview.audience_description,
+            "",
+            "Текст:",
+            html.quote(preview.text),
+        ]
+    )
+
+
+def _build_broadcast_result_text(result: BroadcastResult) -> str:
+    photo_text = "Да" if result.has_photo else "Нет"
+    return "\n".join(
+        [
+            "📢 Рассылка завершена",
+            "",
+            f"Формат: {result.format_label}",
+            f"Аудитория: {result.audience_label}",
+            f"Картинка: {photo_text}",
+            f"Получателей: {result.recipients_count}",
+            f"Отправлено: {result.sent_count}",
+            f"Не доставлено: {result.failed_count}",
+            "",
+            "Превью текста:",
+            html.quote(result.text_preview),
         ]
     )
 

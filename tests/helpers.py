@@ -22,8 +22,6 @@ class DummySession:
 
 def make_habit(**overrides: object) -> SimpleNamespace:
     created_at = datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc)
-    # Значения по умолчанию делают тесты компактнее, но при этом создают
-    # объект, у которого есть все атрибуты, нужные сервисам.
     defaults = {
         "id": 1,
         "user_id": 1,
@@ -50,8 +48,7 @@ def make_habit(**overrides: object) -> SimpleNamespace:
 
 
 def make_user(**overrides: object) -> SimpleNamespace:
-    # Тестовые пользователи повторяют форму объектов, которую ждут сервисы
-    # и промежуточные слои, но не требуют настоящих ORM-экземпляров.
+    created_at = datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc)
     defaults = {
         "id": 1,
         "telegram_id": 123456,
@@ -60,6 +57,9 @@ def make_user(**overrides: object) -> SimpleNamespace:
         "last_name": None,
         "is_admin": False,
         "is_blocked": False,
+        "created_at": created_at,
+        "updated_at": created_at,
+        "last_interaction_at": created_at,
         "utc_offset_minutes": 180,
         "last_daily_summary_sent_for_date": None,
         "last_weekly_summary_sent_for_week_start": None,

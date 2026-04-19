@@ -2,6 +2,7 @@
 
 from app.bot.callbacks.admin import (
     AdminActionLogCallback,
+    AdminBroadcastCallback,
     AdminDashboardCallback,
     AdminDeletedHabitActionCallback,
     AdminFeedbackCallback,
@@ -40,6 +41,7 @@ from app.bot.callbacks.navigation import OpenProgressCallback, OpenTodayCallback
 
 __all__ = [
     "AdminDashboardCallback",
+    "AdminBroadcastCallback",
     "AdminPageCallback",
     "AdminUserCallback",
     "AdminUserActionCallback",

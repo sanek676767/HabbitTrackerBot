@@ -2,6 +2,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.callbacks import (
     AdminActionLogCallback,
+    AdminBroadcastCallback,
     AdminDashboardCallback,
     AdminDeletedHabitActionCallback,
     AdminFeedbackActionCallback,
@@ -62,13 +63,19 @@ def get_admin_dashboard_keyboard(*, unread_feedback_count: int) -> InlineKeyboar
                     ).pack(),
                 ),
                 InlineKeyboardButton(
-                    text="📜 Журнал действий",
+                    text="📝 Журнал действий",
                     callback_data=AdminPageCallback(
                         section=ACTION_LOG_SECTION,
                         page=1,
                         user_id=0,
                     ).pack(),
                 ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📢 Рассылка",
+                    callback_data=AdminBroadcastCallback(action="open").pack(),
+                )
             ],
         ]
     )
@@ -83,6 +90,111 @@ def get_admin_search_keyboard() -> InlineKeyboardMarkup:
                     callback_data=AdminDashboardCallback(action="home").pack(),
                 )
             ]
+        ]
+    )
+
+
+def get_admin_broadcast_audience_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Активные пользователи",
+                    callback_data=AdminBroadcastCallback(action="audience_active").pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Все пользователи",
+                    callback_data=AdminBroadcastCallback(action="audience_all").pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К разделам",
+                    callback_data=AdminDashboardCallback(action="home").pack(),
+                )
+            ],
+        ]
+    )
+
+
+def get_admin_broadcast_format_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Только текст",
+                    callback_data=AdminBroadcastCallback(action="format_text").pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Текст + картинка",
+                    callback_data=AdminBroadcastCallback(action="format_photo").pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К разделам",
+                    callback_data=AdminDashboardCallback(action="home").pack(),
+                )
+            ],
+        ]
+    )
+
+
+def get_admin_broadcast_input_cancel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Отмена",
+                    callback_data=AdminBroadcastCallback(action="cancel").pack(),
+                )
+            ]
+        ]
+    )
+
+
+def get_admin_broadcast_confirmation_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Отправить",
+                    callback_data=AdminBroadcastCallback(action="send").pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Изменить",
+                    callback_data=AdminBroadcastCallback(action="edit").pack(),
+                ),
+                InlineKeyboardButton(
+                    text="Отмена",
+                    callback_data=AdminBroadcastCallback(action="cancel").pack(),
+                ),
+            ],
+        ]
+    )
+
+
+def get_admin_broadcast_result_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Новая рассылка",
+                    callback_data=AdminBroadcastCallback(action="open").pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К разделам",
+                    callback_data=AdminDashboardCallback(action="home").pack(),
+                )
+            ],
         ]
     )
 
@@ -165,14 +277,18 @@ def get_admin_user_card_keyboard(user_card: AdminUserCard) -> InlineKeyboardMark
             ],
             [
                 InlineKeyboardButton(
-                    text="✅ Разблокировать" if user_card.is_blocked else "🚫 Заблокировать",
+                    text="✅ Разблокировать"
+                    if user_card.is_blocked
+                    else "🚫 Заблокировать",
                     callback_data=AdminUserActionCallback(
                         action="unblock" if user_card.is_blocked else "ask_block",
                         user_id=user_card.id,
                     ).pack(),
                 ),
                 InlineKeyboardButton(
-                    text="↩️ Снять права" if user_card.is_admin else "👑 Выдать права",
+                    text="↩️ Снять права"
+                    if user_card.is_admin
+                    else "👑 Выдать права",
                     callback_data=AdminUserActionCallback(
                         action="ask_revoke" if user_card.is_admin else "grant",
                         user_id=user_card.id,
@@ -275,7 +391,9 @@ def get_admin_habit_list_keyboard(habits_page: AdminHabitListPage) -> InlineKeyb
             [
                 InlineKeyboardButton(
                     text="⬅️ К карточке",
-                    callback_data=AdminUserCallback(user_id=habits_page.owner_user_id or 0).pack(),
+                    callback_data=AdminUserCallback(
+                        user_id=habits_page.owner_user_id or 0
+                    ).pack(),
                 )
             ]
         )
@@ -317,7 +435,9 @@ def get_admin_restore_confirm_keyboard(
     )
 
 
-def get_admin_feedback_list_keyboard(feedback_page: FeedbackListPage) -> InlineKeyboardMarkup:
+def get_admin_feedback_list_keyboard(
+    feedback_page: FeedbackListPage,
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     for feedback in feedback_page.items:
         rows.append(
@@ -371,7 +491,9 @@ def get_admin_feedback_card_keyboard(
     page: int,
     has_reply: bool,
 ) -> InlineKeyboardMarkup:
-    reply_button_text = "✉️ Ответить ещё раз" if has_reply else "✉️ Ответить"
+    reply_button_text = (
+        "✉️ Ответить ещё раз" if has_reply else "✉️ Ответить"
+    )
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -402,7 +524,11 @@ def get_admin_feedback_card_keyboard(
     )
 
 
-def get_admin_feedback_reply_keyboard(*, feedback_id: int, page: int) -> InlineKeyboardMarkup:
+def get_admin_feedback_reply_keyboard(
+    *,
+    feedback_id: int,
+    page: int,
+) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -419,7 +545,9 @@ def get_admin_feedback_reply_keyboard(*, feedback_id: int, page: int) -> InlineK
     )
 
 
-def get_admin_action_log_list_keyboard(log_page: AdminActionLogPage) -> InlineKeyboardMarkup:
+def get_admin_action_log_list_keyboard(
+    log_page: AdminActionLogPage,
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     for item in log_page.items:
         rows.append(

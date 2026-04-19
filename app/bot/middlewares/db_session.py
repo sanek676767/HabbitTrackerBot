@@ -14,6 +14,7 @@ from app.repositories.habit_repository import HabitRepository
 from app.repositories.user_repository import UserRepository
 from app.services.admin_action_log_service import AdminActionLogService
 from app.services.admin_service import AdminService
+from app.services.broadcast_service import BroadcastService
 from app.services.feedback_service import FeedbackService
 from app.services.habit_service import HabitService
 from app.services.progress_service import ProgressService
@@ -64,6 +65,11 @@ class DbSessionMiddleware(BaseMiddleware):
                 admin_action_log_service=admin_action_log_service,
             )
             data["admin_action_log_service"] = admin_action_log_service
+            data["broadcast_service"] = BroadcastService(
+                session=session,
+                user_repository=user_repository,
+                admin_action_log_service=admin_action_log_service,
+            )
             data["feedback_service"] = FeedbackService(
                 session=session,
                 user_repository=user_repository,

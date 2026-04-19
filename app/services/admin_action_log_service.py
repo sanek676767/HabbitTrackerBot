@@ -19,17 +19,40 @@ ACTION_TEXTS = {
     "revoke_admin": "снял права администратора",
     "restore_deleted_habit": "восстановил удалённую привычку",
     "reply_feedback": "ответил на обращение",
+    "send_broadcast": "отправил рассылку",
 }
 ENTITY_TEXTS = {
     "user": "пользователь",
     "habit": "привычка",
     "feedback": "обращение",
+    "broadcast": "рассылка",
 }
 DETAIL_LABELS = {
     "habit_title": "Привычка",
     "feedback_reply_text": "Текст ответа",
     "feedback_preview": "Текст обращения",
+    "broadcast_type": "Тип",
+    "audience_type": "Тип аудитории",
+    "audience_summary": "Аудитория",
+    "recipients_count": "Получателей",
+    "sent_count": "Отправлено",
+    "failed_count": "Не доставлено",
+    "text_preview": "Превью текста",
+    "photo_file_id": "File ID картинки",
 }
+PRIORITY_DETAIL_KEYS = (
+    "habit_title",
+    "feedback_preview",
+    "feedback_reply_text",
+    "broadcast_type",
+    "audience_type",
+    "audience_summary",
+    "recipients_count",
+    "sent_count",
+    "failed_count",
+    "text_preview",
+    "photo_file_id",
+)
 
 
 class AdminActionLogServiceError(Exception):
@@ -191,6 +214,38 @@ class AdminActionLogService:
             },
         )
 
+    async def log_broadcast(
+        self,
+        *,
+        actor_user_id: int,
+        audience_type: str,
+        broadcast_type: str,
+        recipients_count: int,
+        sent_count: int,
+        failed_count: int,
+        text_preview: str,
+        audience_summary: str,
+        photo_file_id: str | None,
+    ) -> None:
+        details_json: dict[str, Any] = {
+            "broadcast_type": broadcast_type,
+            "audience_type": audience_type,
+            "audience_summary": audience_summary,
+            "recipients_count": recipients_count,
+            "sent_count": sent_count,
+            "failed_count": failed_count,
+            "text_preview": text_preview,
+        }
+        if photo_file_id is not None:
+            details_json["photo_file_id"] = photo_file_id
+
+        await self.create_log(
+            actor_user_id=actor_user_id,
+            action_type="send_broadcast",
+            entity_type="broadcast",
+            details_json=details_json,
+        )
+
     async def get_logs_page(
         self,
         actor_telegram_id: int,
@@ -239,14 +294,19 @@ class AdminActionLogService:
 
     @classmethod
     def _build_list_item(cls, log) -> AdminActionLogListItem:
-        actor_display_name = cls._build_person_label(log.actor_user, fallback=str(log.actor_user_id))
+        actor_display_name = cls._build_person_label(
+            log.actor_user,
+            fallback=str(log.actor_user_id),
+        )
         action_text = cls._get_action_text(log.action_type)
         entity_text = cls._build_entity_text(
             log.entity_type,
             log.entity_id,
             log.details_json,
         )
-        target_display_name = cls._build_person_label(log.target_user) if log.target_user else None
+        target_display_name = (
+            cls._build_person_label(log.target_user) if log.target_user else None
+        )
         summary_text = cls._truncate_text(
             f"{actor_display_name} • {action_text} • {log.created_at.strftime('%d.%m %H:%M')}",
             64,
@@ -263,8 +323,13 @@ class AdminActionLogService:
 
     @classmethod
     def _build_card(cls, log) -> AdminActionLogCard:
-        actor_display_name = cls._build_person_label(log.actor_user, fallback=str(log.actor_user_id))
-        target_display_name = cls._build_person_label(log.target_user) if log.target_user else None
+        actor_display_name = cls._build_person_label(
+            log.actor_user,
+            fallback=str(log.actor_user_id),
+        )
+        target_display_name = (
+            cls._build_person_label(log.target_user) if log.target_user else None
+        )
         return AdminActionLogCard(
             id=log.id,
             actor_display_name=actor_display_name,
@@ -336,9 +401,7 @@ class AdminActionLogService:
 
         items: list[AdminActionLogDetailItem] = []
         used_keys: set[str] = set()
-        # Самые важные поля показываем первыми, чтобы карточка журнала
-        # читалась естественно и без лишних прыжков по тексту.
-        for key in ("habit_title", "feedback_preview", "feedback_reply_text"):
+        for key in PRIORITY_DETAIL_KEYS:
             value = details_json.get(key)
             if value is None:
                 continue
