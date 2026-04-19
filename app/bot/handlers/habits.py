@@ -6,6 +6,7 @@ from app.bot.callbacks import (
     HabitDeleteCallback,
     HabitDeleteConfirmCallback,
     HabitDoneCallback,
+    HabitHistoryCallback,
     HabitListCallback,
     HabitListSource,
     HabitRestoreCallback,
@@ -15,12 +16,14 @@ from app.bot.callbacks import (
 from app.bot.habit_text import (
     build_delete_confirm_text,
     build_habit_card_text,
+    build_habit_history_text,
     build_habit_stats_text,
 )
 from app.bot.keyboards import (
     MY_HABITS_BUTTON,
     get_habit_card_keyboard,
     get_habit_delete_confirm_keyboard,
+    get_habit_history_keyboard,
     get_habit_stats_keyboard,
     get_habits_list_keyboard,
 )
@@ -31,6 +34,7 @@ from app.services.habit_service import (
     HabitNotDueTodayError,
     HabitNotFoundError,
     HabitService,
+    HabitValidationError,
 )
 from app.services.user_service import UserService
 
@@ -191,6 +195,49 @@ async def show_habit_stats(
     await callback.message.edit_text(
         build_habit_stats_text(stats),
         reply_markup=get_habit_stats_keyboard(stats.id, callback_data.source),
+    )
+    await callback.answer()
+
+
+@router.callback_query(HabitHistoryCallback.filter())
+async def show_habit_history(
+    callback: CallbackQuery,
+    callback_data: HabitHistoryCallback,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    if callback.from_user is None or callback.message is None:
+        await callback.answer()
+        return
+
+    user = await user_service.get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала отправь /start.", show_alert=True)
+        return
+
+    try:
+        history = await habit_service.get_habit_history(
+            user.id,
+            callback_data.habit_id,
+            days=callback_data.days,
+        )
+    except HabitValidationError as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+    except HabitNotFoundError:
+        await callback.answer("Привычка не найдена.", show_alert=True)
+        return
+    except HabitDeletedError as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        build_habit_history_text(history),
+        reply_markup=get_habit_history_keyboard(
+            history.habit_id,
+            callback_data.source,
+            history.period_days,
+        ),
     )
     await callback.answer()
 

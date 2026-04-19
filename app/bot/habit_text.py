@@ -1,6 +1,6 @@
 from aiogram import html
 
-from app.services.habit_service import HabitCard, HabitStats
+from app.services.habit_service import HabitCard, HabitHistory, HabitStats
 
 
 def build_habit_card_text(habit_card: HabitCard) -> str:
@@ -109,6 +109,29 @@ def build_habit_stats_text(stats: HabitStats) -> str:
     return "\n".join(lines)
 
 
+def build_habit_history_text(history: HabitHistory) -> str:
+    lines = [
+        f"🗓 {html.quote(history.title)}",
+        "",
+        f"Частота: {history.frequency_text}",
+    ]
+
+    if history.goal_text is not None:
+        lines.append(f"Цель: {history.goal_text}")
+
+    lines.extend(
+        [
+            f"Период: {history.period_days} {_format_days_label(history.period_days)}",
+            "",
+        ]
+    )
+    lines.extend(
+        f"{entry.day.strftime('%d.%m')} — {entry.status}"
+        for entry in history.entries
+    )
+    return "\n".join(lines)
+
+
 def build_delete_confirm_text(habit_card: HabitCard) -> str:
     return "\n".join(
         [
@@ -117,3 +140,13 @@ def build_delete_confirm_text(habit_card: HabitCard) -> str:
             "Она исчезнет из твоих списков. Если понадобится, её сможет вернуть администратор.",
         ]
     )
+
+
+def _format_days_label(days: int) -> str:
+    if 11 <= days % 100 <= 14:
+        return "дней"
+    if days % 10 == 1:
+        return "день"
+    if 2 <= days % 10 <= 4:
+        return "дня"
+    return "дней"

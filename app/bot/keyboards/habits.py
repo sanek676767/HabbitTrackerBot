@@ -12,6 +12,7 @@ from app.bot.callbacks import (
     HabitEditCancelCallback,
     HabitGoalActionCallback,
     HabitGoalMenuCallback,
+    HabitHistoryCallback,
     HabitListCallback,
     HabitListSource,
     HabitReturnTarget,
@@ -141,6 +142,18 @@ def get_habit_card_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
+                text="🗓 История",
+                callback_data=HabitHistoryCallback(
+                    habit_id=habit_id,
+                    source=source,
+                    days=7,
+                ).pack(),
+            )
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
                 text="🗂 В архив" if is_active else "♻️ Вернуть в активные",
                 callback_data=(
                     HabitArchiveCallback(
@@ -212,6 +225,41 @@ def get_habit_stats_keyboard(habit_id: int, source: str) -> InlineKeyboardMarkup
                     ).pack(),
                 )
             ]
+        ]
+    )
+
+
+def get_habit_history_keyboard(
+    habit_id: int,
+    source: str,
+    _selected_days: int,
+) -> InlineKeyboardMarkup:
+    def _build_period_button(days: int) -> InlineKeyboardButton:
+        return InlineKeyboardButton(
+            text=f"{days} дней",
+            callback_data=HabitHistoryCallback(
+                habit_id=habit_id,
+                source=source,
+                days=days,
+            ).pack(),
+        )
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _build_period_button(7),
+                _build_period_button(14),
+                _build_period_button(30),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ К привычке",
+                    callback_data=HabitViewCallback(
+                        habit_id=habit_id,
+                        source=source,
+                    ).pack(),
+                )
+            ],
         ]
     )
 

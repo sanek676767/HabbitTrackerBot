@@ -24,7 +24,9 @@ from app.services.habit_schedule_service import (
 
 
 TITLE_MAX_LENGTH = 100
-LAST_7_DAYS_WINDOW = 7
+DEFAULT_HISTORY_PERIOD_DAYS = 7
+LAST_7_DAYS_WINDOW = DEFAULT_HISTORY_PERIOD_DAYS
+SUPPORTED_HISTORY_PERIODS = (7, 14, 30)
 REMINDER_TIME_PATTERN = re.compile(r"^\d{2}:\d{2}$")
 
 
@@ -114,6 +116,22 @@ class HabitProgressSummary:
     last_7_days_progress_text: str
     frequency_text: str
     goal: HabitGoalProgress | None
+
+
+@dataclass(slots=True)
+class HabitHistoryDay:
+    day: date
+    status: str
+
+
+@dataclass(slots=True)
+class HabitHistory:
+    habit_id: int
+    title: str
+    frequency_text: str
+    goal_text: str | None
+    period_days: int
+    entries: list[HabitHistoryDay]
 
 
 class HabitService:
@@ -391,6 +409,44 @@ class HabitService:
             goal=progress.goal,
         )
 
+    async def get_habit_history(
+        self,
+        user_id: int,
+        habit_id: int,
+        *,
+        days: int = DEFAULT_HISTORY_PERIOD_DAYS,
+    ) -> HabitHistory:
+        period_days = self._validate_history_period(days)
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        today = self._get_today()
+        start_date = today - timedelta(days=period_days - 1)
+        completion_dates = set(await self._habit_log_repository.get_completion_dates(habit.id))
+
+        entries = [
+            HabitHistoryDay(
+                day=history_day,
+                status=self._resolve_history_day_status(
+                    habit,
+                    history_day,
+                    completion_dates,
+                    today,
+                ),
+            )
+            for history_day in (
+                start_date + timedelta(days=offset)
+                for offset in range(period_days)
+            )
+        ]
+
+        return HabitHistory(
+            habit_id=habit.id,
+            title=habit.title,
+            frequency_text=HabitScheduleService.format_schedule(habit),
+            goal_text=self.format_goal(habit),
+            period_days=period_days,
+            entries=entries,
+        )
+
     async def archive_habit(self, user_id: int, habit_id: int) -> bool:
         habit = await self._get_visible_user_habit(user_id, habit_id)
         if not habit.is_active:
@@ -630,6 +686,27 @@ class HabitService:
                 marker = "—"
             lines.append(f"{day.strftime('%d.%m')}: {marker}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _resolve_history_day_status(
+        habit: Habit,
+        history_day: date,
+        completion_dates: set[date],
+        today: date,
+    ) -> str:
+        if not HabitScheduleService.is_habit_due_on_date(habit, history_day):
+            return "не запланировано"
+        if history_day in completion_dates:
+            return "выполнено"
+        if history_day == today:
+            return "ждёт отметку"
+        return "пропущено"
+
+    @staticmethod
+    def _validate_history_period(days: int) -> int:
+        if days not in SUPPORTED_HISTORY_PERIODS:
+            raise HabitValidationError("История доступна на 7, 14 или 30 дней.")
+        return days
 
     @staticmethod
     def _ensure_reminder_can_be_enabled(habit: Habit) -> None:

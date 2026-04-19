@@ -29,6 +29,12 @@ class HabitStatsCallback(CallbackData, prefix="habit_stats"):
     source: str
 
 
+class HabitHistoryCallback(CallbackData, prefix="habit_history"):
+    habit_id: int
+    source: str
+    days: int
+
+
 class HabitEditCallback(CallbackData, prefix="habit_edit"):
     habit_id: int
     source: str
