@@ -102,6 +102,14 @@ class HabitCard:
 
 
 @dataclass(slots=True)
+class HabitStatsWindow:
+    days: int
+    completion_rate_percent: int
+    planned_days: int
+    completed_days: int
+
+
+@dataclass(slots=True)
 class HabitStats:
     id: int
     title: str
@@ -114,6 +122,8 @@ class HabitStats:
     created_at: datetime
     frequency_text: str
     goal: HabitGoalProgress | None
+    goal_remaining_text: str | None
+    windows: list[HabitStatsWindow]
     is_active: bool = True
     is_paused: bool = False
 
@@ -424,6 +434,8 @@ class HabitService:
     async def get_habit_stats(self, user_id: int, habit_id: int) -> HabitStats:
         habit = await self._get_visible_user_habit(user_id, habit_id)
         progress = await self._build_progress_summary(habit)
+        completion_dates = set(await self._habit_log_repository.get_completion_dates(habit.id))
+        today = self._get_today()
         return HabitStats(
             id=habit.id,
             title=habit.title,
@@ -436,6 +448,12 @@ class HabitService:
             created_at=habit.created_at,
             frequency_text=progress.frequency_text,
             goal=progress.goal,
+            goal_remaining_text=self._build_goal_remaining_text(progress.goal),
+            windows=self._build_stats_windows(
+                habit,
+                completion_dates,
+                today,
+            ),
             is_active=habit.is_active,
             is_paused=habit.is_paused,
         )
@@ -646,6 +664,99 @@ class HabitService:
         if goal is None:
             return None
         return HabitGoalService.format_goal_config(goal)
+
+    @classmethod
+    def _build_stats_windows(
+        cls,
+        habit: Habit,
+        completion_dates: set[date],
+        today: date,
+    ) -> list[HabitStatsWindow]:
+        return [
+            cls._build_stats_window(habit, completion_dates, today, days=days)
+            for days in SUPPORTED_HISTORY_PERIODS
+        ]
+
+    @classmethod
+    def _build_stats_window(
+        cls,
+        habit: Habit,
+        completion_dates: set[date],
+        today: date,
+        *,
+        days: int,
+    ) -> HabitStatsWindow:
+        window_start = today - timedelta(days=days - 1)
+        due_dates = cls._get_due_dates_for_stats_window(
+            habit,
+            window_start,
+            today,
+            completion_dates,
+        )
+        planned_days = len(due_dates)
+        completed_days = sum(1 for day in due_dates if day in completion_dates)
+        completion_rate_percent = cls._calculate_completion_rate_percent(
+            completed_days,
+            planned_days,
+        )
+        return HabitStatsWindow(
+            days=days,
+            completion_rate_percent=completion_rate_percent,
+            planned_days=planned_days,
+            completed_days=completed_days,
+        )
+
+    @classmethod
+    def _get_due_dates_for_stats_window(
+        cls,
+        habit: Habit,
+        start_date: date,
+        end_date: date,
+        completion_dates: set[date],
+    ) -> list[date]:
+        due_dates = HabitScheduleService.get_due_dates(habit, start_date, end_date)
+        pause_start_date = cls._get_pause_start_date(habit, end_date)
+        if pause_start_date is None:
+            return due_dates
+
+        include_pause_start_date = pause_start_date in completion_dates
+        return [
+            due_date
+            for due_date in due_dates
+            if due_date < pause_start_date
+            or (include_pause_start_date and due_date == pause_start_date)
+        ]
+
+    @staticmethod
+    def _calculate_completion_rate_percent(
+        completed_days: int,
+        planned_days: int,
+    ) -> int:
+        if planned_days == 0:
+            return 0
+        return (completed_days * 100) // planned_days
+
+    @staticmethod
+    def _build_goal_remaining_text(goal: HabitGoalProgress | None) -> str | None:
+        if goal is None:
+            return None
+
+        remaining = max(goal.target_value - goal.current_value, 0)
+        if goal.is_achieved or remaining == 0:
+            return "цель достигнута"
+
+        if goal.goal_type == HabitGoalService.COMPLETIONS:
+            return (
+                "осталось "
+                f"{remaining} "
+                f"{HabitGoalService._pluralize(remaining, 'выполнение', 'выполнения', 'выполнений')}"
+            )
+
+        return (
+            "осталось "
+            f"{remaining} "
+            f"{HabitGoalService._pluralize(remaining, 'день серии', 'дня серии', 'дней серии')}"
+        )
 
     async def _build_progress_summary(self, habit: Habit) -> HabitProgressSummary:
         completion_dates = await self._habit_log_repository.get_completion_dates(habit.id)

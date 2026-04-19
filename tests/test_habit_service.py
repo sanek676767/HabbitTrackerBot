@@ -377,6 +377,96 @@ async def test_complete_habit_rejects_when_habit_is_paused(dummy_session, monkey
 
 
 @pytest.mark.asyncio
+async def test_get_habit_stats_includes_period_metrics_and_goal_remaining(
+    dummy_session,
+    monkeypatch,
+) -> None:
+    target_date = date(2026, 4, 10)
+    habit = make_habit(
+        id=5,
+        user_id=1,
+        start_date=date(2026, 4, 1),
+        goal_type=HabitGoalService.COMPLETIONS,
+        goal_target_value=10,
+    )
+    service = build_service(
+        dummy_session,
+        habit=habit,
+        completed_dates={5: [date(2026, 4, 4), date(2026, 4, 5), date(2026, 4, 6), date(2026, 4, 8)]},
+    )
+    monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
+
+    stats = await service.get_habit_stats(1, 5)
+
+    assert [(window.days, window.completed_days, window.planned_days) for window in stats.windows] == [
+        (7, 4, 7),
+        (14, 4, 10),
+        (30, 4, 10),
+    ]
+    assert [window.completion_rate_percent for window in stats.windows] == [57, 40, 40]
+    assert stats.goal is not None
+    assert stats.goal.progress_text == "4 / 10"
+    assert stats.goal_remaining_text == "осталось 6 выполнений"
+
+
+@pytest.mark.asyncio
+async def test_get_habit_stats_excludes_due_days_after_pause_start(
+    dummy_session,
+    monkeypatch,
+) -> None:
+    target_date = date(2026, 4, 10)
+    habit = make_habit(
+        id=5,
+        user_id=1,
+        start_date=date(2026, 4, 1),
+        is_paused=True,
+        paused_at=datetime(2026, 4, 9, 9, 0, tzinfo=timezone.utc),
+    )
+    service = build_service(
+        dummy_session,
+        habit=habit,
+        completed_dates={5: [date(2026, 4, 4), date(2026, 4, 5), date(2026, 4, 6), date(2026, 4, 8)]},
+    )
+    monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
+
+    stats = await service.get_habit_stats(1, 5)
+
+    assert [(window.days, window.completed_days, window.planned_days) for window in stats.windows] == [
+        (7, 4, 5),
+        (14, 4, 8),
+        (30, 4, 8),
+    ]
+    assert [window.completion_rate_percent for window in stats.windows] == [80, 50, 50]
+
+
+@pytest.mark.asyncio
+async def test_get_habit_stats_builds_remaining_text_for_streak_goal(
+    dummy_session,
+    monkeypatch,
+) -> None:
+    target_date = date(2026, 4, 10)
+    habit = make_habit(
+        id=5,
+        user_id=1,
+        start_date=date(2026, 4, 1),
+        goal_type=HabitGoalService.STREAK,
+        goal_target_value=5,
+    )
+    service = build_service(
+        dummy_session,
+        habit=habit,
+        completed_dates={5: [date(2026, 4, 8), date(2026, 4, 9)]},
+    )
+    monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
+
+    stats = await service.get_habit_stats(1, 5)
+
+    assert stats.goal is not None
+    assert stats.goal.progress_text == "2 / 5"
+    assert stats.goal_remaining_text == "осталось 3 дня серии"
+
+
+@pytest.mark.asyncio
 async def test_update_habit_schedule_reanchors_start_date_to_today_product_rule(
     dummy_session,
     monkeypatch,

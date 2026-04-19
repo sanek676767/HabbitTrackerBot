@@ -114,15 +114,21 @@ def build_habit_stats_text(stats: HabitStats) -> str:
     else:
         lines.append(f"Цель: {stats.goal.goal_text}")
         lines.append(f"Прогресс: {stats.goal.progress_text}")
-        lines.append(
-            "Результат: цель достигнута" if stats.goal.is_achieved else "Результат: цель ещё в работе"
-        )
+        lines.append(f"До цели: {stats.goal_remaining_text}")
 
     lines.extend(
         [
             "",
-            "Последние 7 дней:",
-            stats.last_7_days_progress_text,
+            "За период:",
+        ]
+    )
+    lines.extend(
+        _build_stats_window_text(window)
+        for window in stats.windows
+    )
+
+    lines.extend(
+        [
             "",
             f"Создана: {created_at}",
         ]
@@ -171,6 +177,13 @@ def _format_days_label(days: int) -> str:
     if 2 <= days % 10 <= 4:
         return "дня"
     return "дней"
+
+
+def _build_stats_window_text(window) -> str:
+    return (
+        f"• {window.days} дн.: {window.completion_rate_percent}% "
+        f"— {window.completed_days} из {window.planned_days}"
+    )
 
 
 def _format_habit_status(*, is_active: bool, is_paused: bool) -> str:
