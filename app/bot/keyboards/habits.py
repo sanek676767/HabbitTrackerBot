@@ -9,6 +9,7 @@ from app.bot.callbacks import (
     HabitDoneCallback,
     HabitEditActionCallback,
     HabitEditCallback,
+    HabitEditCancelCallback,
     HabitGoalActionCallback,
     HabitGoalMenuCallback,
     HabitListCallback,
@@ -277,9 +278,8 @@ def get_habit_edit_input_keyboard(habit_id: int, source: str) -> InlineKeyboardM
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ К привычке",
-                    callback_data=HabitEditActionCallback(
-                        action="back",
+                    text="⬅️ К редактированию",
+                    callback_data=HabitEditCancelCallback(
                         habit_id=habit_id,
                         source=source,
                     ).pack(),
@@ -449,7 +449,11 @@ def get_habit_goal_menu_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ К привычке",
+                text=(
+                    "⬅️ К редактированию"
+                    if return_to == HabitReturnTarget.EDIT.value
+                    else "⬅️ К привычке"
+                ),
                 callback_data=HabitGoalActionCallback(
                     action="back",
                     habit_id=habit_id,
@@ -525,7 +529,11 @@ def get_habit_reminder_menu_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="⬅️ К привычке",
+                text=(
+                    "⬅️ К редактированию"
+                    if return_to == HabitReturnTarget.EDIT.value
+                    else "⬅️ К привычке"
+                ),
                 callback_data=(
                     HabitEditCallback(
                         habit_id=habit_id,

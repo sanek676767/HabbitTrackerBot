@@ -4,7 +4,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
-from app.bot.callbacks import HabitEditActionCallback, HabitEditCallback
+from app.bot.callbacks import (
+    HabitEditActionCallback,
+    HabitEditCallback,
+    HabitEditCancelCallback,
+    HabitReturnTarget,
+)
+from app.bot.habit_navigation import build_habit_return_view
 from app.bot.habit_text import build_habit_card_text, build_habit_edit_menu_text
 from app.bot.keyboards import (
     ALL_MAIN_MENU_BUTTONS,
@@ -107,6 +113,40 @@ async def return_from_edit_menu(
     await callback.answer()
 
 
+@router.callback_query(EditHabitStates.waiting_for_title, HabitEditCancelCallback.filter())
+async def cancel_title_edit(
+    callback: CallbackQuery,
+    callback_data: HabitEditCancelCallback,
+    state: FSMContext,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    if callback.from_user is None or callback.message is None:
+        await callback.answer()
+        return
+
+    user = await user_service.get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала отправь /start.", show_alert=True)
+        return
+
+    try:
+        habit_card = await habit_service.get_habit_card(user.id, callback_data.habit_id)
+    except HabitNotFoundError:
+        await callback.answer("Привычка не найдена.", show_alert=True)
+        return
+    except HabitDeletedError as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+
+    await state.clear()
+    await callback.message.edit_text(
+        build_habit_edit_menu_text(habit_card),
+        reply_markup=get_habit_edit_keyboard(habit_card.id, callback_data.source),
+    )
+    await callback.answer("Изменение названия отменил.")
+
+
 @router.callback_query(HabitEditActionCallback.filter(F.action == "title"))
 async def start_title_edit(
     callback: CallbackQuery,
@@ -199,12 +239,13 @@ async def save_habit_title(
         return
 
     await state.clear()
-    await _render_card_message(
+    await _render_habit_destination(
         bot=message.bot,
         chat_id=prompt_chat_id,
         message_id=prompt_message_id,
         habit_card=habit_card,
         source=source,
+        return_to=HabitReturnTarget.EDIT.value,
     )
     await message.answer(f"Название обновил: «{html.quote(habit_card.title)}».")
 
@@ -267,7 +308,15 @@ async def handle_frequency_edit(
         return
 
     if callback_data.action == "back":
-        habit_card = await habit_service.get_habit_card(user.id, callback_data.habit_id)
+        try:
+            habit_card = await habit_service.get_habit_card(user.id, callback_data.habit_id)
+        except HabitNotFoundError:
+            await callback.answer("Привычка не найдена.", show_alert=True)
+            return
+        except HabitDeletedError as error:
+            await callback.answer(str(error), show_alert=True)
+            return
+
         await state.clear()
         await callback.message.edit_text(
             build_habit_edit_menu_text(habit_card),
@@ -329,16 +378,12 @@ async def handle_frequency_edit(
         return
 
     await state.clear()
-    await callback.message.edit_text(
-        build_habit_card_text(habit_card),
-        reply_markup=get_habit_card_keyboard(
-            habit_card.id,
-            callback_data.source,
-            is_completed_today=habit_card.is_completed_today,
-            is_active=habit_card.is_active,
-            is_due_today=habit_card.is_due_today,
-        ),
+    text, reply_markup = build_habit_return_view(
+        habit_card,
+        callback_data.source,
+        HabitReturnTarget.EDIT.value,
     )
+    await callback.message.edit_text(text, reply_markup=reply_markup)
     await callback.answer("Частоту обновил.")
 
 
@@ -363,7 +408,15 @@ async def handle_weekdays_edit(
     selected_days = HabitScheduleService.decode_week_days_mask(state_data.get("week_days_mask"))
 
     if callback_data.action == "back_frequency":
-        habit_card = await habit_service.get_habit_card(user.id, callback_data.habit_id)
+        try:
+            habit_card = await habit_service.get_habit_card(user.id, callback_data.habit_id)
+        except HabitNotFoundError:
+            await callback.answer("Привычка не найдена.", show_alert=True)
+            return
+        except HabitDeletedError as error:
+            await callback.answer(str(error), show_alert=True)
+            return
+
         await state.set_state(EditHabitStates.choosing_frequency)
         await callback.message.edit_text(
             _build_frequency_prompt_text(habit_card.title, habit_card.frequency_text),
@@ -388,7 +441,16 @@ async def handle_weekdays_edit(
             else None
         )
         await state.update_data(week_days_mask=week_days_mask)
-        habit_card = await habit_service.get_habit_card(user.id, callback_data.habit_id)
+
+        try:
+            habit_card = await habit_service.get_habit_card(user.id, callback_data.habit_id)
+        except HabitNotFoundError:
+            await callback.answer("Привычка не найдена.", show_alert=True)
+            return
+        except HabitDeletedError as error:
+            await callback.answer(str(error), show_alert=True)
+            return
+
         await callback.message.edit_text(
             _build_weekdays_prompt_text(habit_card.title, selected_days),
             reply_markup=get_habit_edit_weekdays_keyboard(
@@ -422,16 +484,12 @@ async def handle_weekdays_edit(
         return
 
     await state.clear()
-    await callback.message.edit_text(
-        build_habit_card_text(habit_card),
-        reply_markup=get_habit_card_keyboard(
-            habit_card.id,
-            callback_data.source,
-            is_completed_today=habit_card.is_completed_today,
-            is_active=habit_card.is_active,
-            is_due_today=habit_card.is_due_today,
-        ),
+    text, reply_markup = build_habit_return_view(
+        habit_card,
+        callback_data.source,
+        HabitReturnTarget.EDIT.value,
     )
+    await callback.message.edit_text(text, reply_markup=reply_markup)
     await callback.answer("Частоту обновил.")
 
 
@@ -479,38 +537,28 @@ def _build_weekdays_prompt_text(title: str, selected_days: list[int]) -> str:
     )
 
 
-async def _render_card_message(
+async def _render_habit_destination(
     *,
     bot,
     chat_id: int,
     message_id: int,
     habit_card,
     source: str,
+    return_to: str,
 ) -> tuple[int, int]:
+    text, reply_markup = build_habit_return_view(habit_card, source, return_to)
     try:
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=message_id,
-            text=build_habit_card_text(habit_card),
-            reply_markup=get_habit_card_keyboard(
-                habit_card.id,
-                source,
-                is_completed_today=habit_card.is_completed_today,
-                is_active=habit_card.is_active,
-                is_due_today=habit_card.is_due_today,
-            ),
+            text=text,
+            reply_markup=reply_markup,
         )
         return chat_id, message_id
     except TelegramBadRequest:
         sent_message = await bot.send_message(
             chat_id=chat_id,
-            text=build_habit_card_text(habit_card),
-            reply_markup=get_habit_card_keyboard(
-                habit_card.id,
-                source,
-                is_completed_today=habit_card.is_completed_today,
-                is_active=habit_card.is_active,
-                is_due_today=habit_card.is_due_today,
-            ),
+            text=text,
+            reply_markup=reply_markup,
         )
         return sent_message.chat.id, sent_message.message_id

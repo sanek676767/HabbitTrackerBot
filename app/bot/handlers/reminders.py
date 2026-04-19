@@ -8,14 +8,12 @@ from app.bot.callbacks import (
     HabitReminderCancelCallback,
     HabitReminderDisableCallback,
     HabitReminderMenuCallback,
-    HabitReturnTarget,
     HabitReminderSetTimeCallback,
+    HabitReturnTarget,
 )
-from app.bot.habit_text import build_habit_card_text, build_habit_edit_menu_text
+from app.bot.habit_navigation import build_habit_return_view
 from app.bot.keyboards import (
     ALL_MAIN_MENU_BUTTONS,
-    get_habit_card_keyboard,
-    get_habit_edit_keyboard,
     get_habit_reminder_input_keyboard,
     get_habit_reminder_menu_keyboard,
 )
@@ -84,7 +82,13 @@ async def open_reminder_menu(
         else None
     )
     await callback.message.edit_text(
-        _build_reminder_menu_text(habit_card.title, habit_card.frequency_text, reminder_state, local_time_status, habit_card.is_active),
+        _build_reminder_menu_text(
+            habit_card.title,
+            habit_card.frequency_text,
+            reminder_state,
+            local_time_status,
+            habit_card.is_active,
+        ),
         reply_markup=get_habit_reminder_menu_keyboard(
             habit_id=habit_card.id,
             source=callback_data.source,
@@ -240,22 +244,12 @@ async def cancel_reminder_setup(
         return
 
     await state.clear()
-    if callback_data.return_to == HabitReturnTarget.EDIT.value:
-        await callback.message.edit_text(
-            build_habit_edit_menu_text(habit_card),
-            reply_markup=get_habit_edit_keyboard(habit_card.id, callback_data.source),
-        )
-    else:
-        await callback.message.edit_text(
-            build_habit_card_text(habit_card),
-            reply_markup=get_habit_card_keyboard(
-                habit_card.id,
-                callback_data.source,
-                is_completed_today=habit_card.is_completed_today,
-                is_active=habit_card.is_active,
-                is_due_today=habit_card.is_due_today,
-            ),
-        )
+    text, reply_markup = build_habit_return_view(
+        habit_card,
+        callback_data.source,
+        callback_data.return_to,
+    )
+    await callback.message.edit_text(text, reply_markup=reply_markup)
     await callback.answer("Настройку напоминания отменил.")
 
 
@@ -303,16 +297,12 @@ async def disable_reminder(
         await callback.answer(str(error), show_alert=True)
         return
 
-    await callback.message.edit_text(
-        build_habit_card_text(habit_card),
-        reply_markup=get_habit_card_keyboard(
-            habit_card.id,
-            callback_data.source,
-            is_completed_today=habit_card.is_completed_today,
-            is_active=habit_card.is_active,
-            is_due_today=habit_card.is_due_today,
-        ),
+    text, reply_markup = build_habit_return_view(
+        habit_card,
+        callback_data.source,
+        callback_data.return_to,
     )
+    await callback.message.edit_text(text, reply_markup=reply_markup)
     await callback.answer("Напоминание выключено.")
 
 
@@ -420,6 +410,7 @@ async def save_reminder_time(
     state_data = await state.get_data()
     habit_id = state_data.get("habit_id")
     source = state_data.get("source")
+    return_to = state_data.get("return_to")
     mode = state_data.get("mode")
     prompt_chat_id = state_data.get("prompt_chat_id")
     prompt_message_id = state_data.get("prompt_message_id")
@@ -427,6 +418,7 @@ async def save_reminder_time(
     if (
         not isinstance(habit_id, int)
         or not isinstance(source, str)
+        or not isinstance(return_to, str)
         or not isinstance(mode, str)
         or not isinstance(prompt_chat_id, int)
         or not isinstance(prompt_message_id, int)
@@ -468,18 +460,13 @@ async def save_reminder_time(
         return
 
     await state.clear()
+    text, reply_markup = build_habit_return_view(habit_card, source, return_to)
     await _render_message(
         bot=message.bot,
         chat_id=prompt_chat_id,
         message_id=prompt_message_id,
-        text=build_habit_card_text(habit_card),
-        reply_markup=get_habit_card_keyboard(
-            habit_card.id,
-            source,
-            is_completed_today=habit_card.is_completed_today,
-            is_active=habit_card.is_active,
-            is_due_today=habit_card.is_due_today,
-        ),
+        text=text,
+        reply_markup=reply_markup,
     )
     await message.answer(success_text)
 

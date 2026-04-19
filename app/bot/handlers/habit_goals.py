@@ -5,11 +5,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from app.bot.callbacks import HabitGoalActionCallback, HabitGoalMenuCallback, HabitReturnTarget
-from app.bot.habit_text import build_habit_card_text, build_habit_edit_menu_text
+from app.bot.habit_navigation import build_habit_return_view
 from app.bot.keyboards import (
     ALL_MAIN_MENU_BUTTONS,
-    get_habit_card_keyboard,
-    get_habit_edit_keyboard,
     get_habit_goal_input_keyboard,
     get_habit_goal_menu_keyboard,
 )
@@ -134,22 +132,12 @@ async def close_goal_menu(
         return
 
     await state.clear()
-    if callback_data.return_to == HabitReturnTarget.EDIT.value:
-        await callback.message.edit_text(
-            build_habit_edit_menu_text(habit_card),
-            reply_markup=get_habit_edit_keyboard(habit_card.id, callback_data.source),
-        )
-    else:
-        await callback.message.edit_text(
-            build_habit_card_text(habit_card),
-            reply_markup=get_habit_card_keyboard(
-                habit_card.id,
-                callback_data.source,
-                is_completed_today=habit_card.is_completed_today,
-                is_active=habit_card.is_active,
-                is_due_today=habit_card.is_due_today,
-            ),
-        )
+    text, reply_markup = build_habit_return_view(
+        habit_card,
+        callback_data.source,
+        callback_data.return_to,
+    )
+    await callback.message.edit_text(text, reply_markup=reply_markup)
     await callback.answer()
 
 
@@ -180,16 +168,12 @@ async def clear_goal(
         return
 
     await state.clear()
-    await callback.message.edit_text(
-        build_habit_card_text(habit_card),
-        reply_markup=get_habit_card_keyboard(
-            habit_card.id,
-            callback_data.source,
-            is_completed_today=habit_card.is_completed_today,
-            is_active=habit_card.is_active,
-            is_due_today=habit_card.is_due_today,
-        ),
+    text, reply_markup = build_habit_return_view(
+        habit_card,
+        callback_data.source,
+        callback_data.return_to,
     )
+    await callback.message.edit_text(text, reply_markup=reply_markup)
     await callback.answer("Цель убрал.")
 
 
@@ -295,6 +279,7 @@ async def save_goal(
     state_data = await state.get_data()
     habit_id = state_data.get("habit_id")
     source = state_data.get("source")
+    return_to = state_data.get("return_to")
     goal_type = state_data.get("goal_type")
     prompt_chat_id = state_data.get("prompt_chat_id")
     prompt_message_id = state_data.get("prompt_message_id")
@@ -302,6 +287,7 @@ async def save_goal(
     if (
         not isinstance(habit_id, int)
         or not isinstance(source, str)
+        or not isinstance(return_to, str)
         or not isinstance(goal_type, str)
         or not isinstance(prompt_chat_id, int)
         or not isinstance(prompt_message_id, int)
@@ -336,12 +322,13 @@ async def save_goal(
         return
 
     await state.clear()
-    await _render_card_message(
+    await _render_habit_destination(
         bot=message.bot,
         chat_id=prompt_chat_id,
         message_id=prompt_message_id,
         habit_card=habit_card,
         source=source,
+        return_to=return_to,
     )
     await message.answer("Цель обновил.")
 
@@ -399,39 +386,29 @@ def _build_goal_value_prompt_text(goal_type: str, title: str) -> str:
     )
 
 
-async def _render_card_message(
+async def _render_habit_destination(
     *,
     bot,
     chat_id: int,
     message_id: int,
     habit_card,
     source: str,
+    return_to: str,
 ) -> tuple[int, int]:
+    text, reply_markup = build_habit_return_view(habit_card, source, return_to)
     try:
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=message_id,
-            text=build_habit_card_text(habit_card),
-            reply_markup=get_habit_card_keyboard(
-                habit_card.id,
-                source,
-                is_completed_today=habit_card.is_completed_today,
-                is_active=habit_card.is_active,
-                is_due_today=habit_card.is_due_today,
-            ),
+            text=text,
+            reply_markup=reply_markup,
         )
         return chat_id, message_id
     except TelegramBadRequest:
         sent_message = await bot.send_message(
             chat_id=chat_id,
-            text=build_habit_card_text(habit_card),
-            reply_markup=get_habit_card_keyboard(
-                habit_card.id,
-                source,
-                is_completed_today=habit_card.is_completed_today,
-                is_active=habit_card.is_active,
-                is_due_today=habit_card.is_due_today,
-            ),
+            text=text,
+            reply_markup=reply_markup,
         )
         return sent_message.chat.id, sent_message.message_id
 

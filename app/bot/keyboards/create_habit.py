@@ -19,38 +19,41 @@ def get_create_habit_cancel_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def get_create_habit_frequency_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Каждый день",
-                    callback_data=CreateHabitCallback(action="freq_daily").pack(),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Через день",
-                    callback_data=CreateHabitCallback(action="freq_interval").pack(),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="По дням недели",
-                    callback_data=CreateHabitCallback(action="freq_weekdays").pack(),
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Отмена",
-                    callback_data=CreateHabitCallback(action="cancel").pack(),
-                )
-            ],
-        ]
-    )
+def get_create_habit_frequency_keyboard(
+    *,
+    back_action: str,
+    show_cancel: bool = True,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text="Каждый день",
+                callback_data=CreateHabitCallback(action="freq_daily").pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="Через день",
+                callback_data=CreateHabitCallback(action="freq_interval").pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="По дням недели",
+                callback_data=CreateHabitCallback(action="freq_weekdays").pack(),
+            )
+        ],
+    ]
+
+    rows.append(_build_back_row(back_action=back_action, show_cancel=show_cancel))
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_create_habit_weekdays_keyboard(selected_days: Sequence[int]) -> InlineKeyboardMarkup:
+def get_create_habit_weekdays_keyboard(
+    selected_days: Sequence[int],
+    *,
+    show_cancel: bool = True,
+) -> InlineKeyboardMarkup:
     selected_days_set = set(selected_days)
     rows: list[list[InlineKeyboardButton]] = [
         [
@@ -79,21 +82,20 @@ def get_create_habit_weekdays_keyboard(selected_days: Sequence[int]) -> InlineKe
                 callback_data=CreateHabitCallback(action="weekdays_done").pack(),
             )
         ],
-        [
-            InlineKeyboardButton(
-                text="⬅️ К частоте",
-                callback_data=CreateHabitCallback(action="to_frequency").pack(),
-            ),
-            InlineKeyboardButton(
-                text="Отмена",
-                callback_data=CreateHabitCallback(action="cancel").pack(),
-            ),
-        ],
     ]
+
+    rows.append(_build_back_row(back_action="to_frequency", show_cancel=show_cancel))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_create_habit_reminder_keyboard(*, reminder_enabled: bool) -> InlineKeyboardMarkup:
+def get_create_habit_reminder_keyboard(
+    *,
+    reminder_enabled: bool,
+    back_action: str,
+    show_cancel: bool = True,
+    next_text: str = "✅ Дальше",
+    skip_text: str = "Без напоминания",
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if reminder_enabled:
         rows.append(
@@ -115,7 +117,7 @@ def get_create_habit_reminder_keyboard(*, reminder_enabled: bool) -> InlineKeybo
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="✅ Дальше",
+                    text=next_text,
                     callback_data=CreateHabitCallback(action="reminder_next").pack(),
                 )
             ]
@@ -132,28 +134,24 @@ def get_create_habit_reminder_keyboard(*, reminder_enabled: bool) -> InlineKeybo
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="Без напоминания",
+                    text=skip_text,
                     callback_data=CreateHabitCallback(action="reminder_skip").pack(),
                 )
             ]
         )
 
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text="⬅️ К частоте",
-                callback_data=CreateHabitCallback(action="to_frequency").pack(),
-            ),
-            InlineKeyboardButton(
-                text="Отмена",
-                callback_data=CreateHabitCallback(action="cancel").pack(),
-            ),
-        ]
-    )
+    rows.append(_build_back_row(back_action=back_action, show_cancel=show_cancel))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_create_habit_goal_keyboard(*, goal_configured: bool) -> InlineKeyboardMarkup:
+def get_create_habit_goal_keyboard(
+    *,
+    goal_configured: bool,
+    back_action: str,
+    show_cancel: bool = True,
+    next_text: str = "✅ Дальше",
+    skip_text: str = "Без цели",
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
@@ -181,7 +179,7 @@ def get_create_habit_goal_keyboard(*, goal_configured: bool) -> InlineKeyboardMa
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="✅ Дальше",
+                    text=next_text,
                     callback_data=CreateHabitCallback(action="goal_next").pack(),
                 )
             ]
@@ -190,40 +188,29 @@ def get_create_habit_goal_keyboard(*, goal_configured: bool) -> InlineKeyboardMa
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="Без цели",
+                    text=skip_text,
                     callback_data=CreateHabitCallback(action="goal_skip").pack(),
                 )
             ]
         )
 
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text="⬅️ К напоминанию",
-                callback_data=CreateHabitCallback(action="to_reminder").pack(),
-            ),
-            InlineKeyboardButton(
-                text="Отмена",
-                callback_data=CreateHabitCallback(action="cancel").pack(),
-            ),
-        ]
-    )
+    rows.append(_build_back_row(back_action=back_action, show_cancel=show_cancel))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_create_habit_text_input_keyboard(*, back_action: str) -> InlineKeyboardMarkup:
+def get_create_habit_text_input_keyboard(
+    *,
+    back_action: str,
+    back_text: str = "⬅️ Назад",
+    show_cancel: bool = True,
+) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data=CreateHabitCallback(action=back_action).pack(),
-                ),
-                InlineKeyboardButton(
-                    text="Отмена",
-                    callback_data=CreateHabitCallback(action="cancel").pack(),
-                ),
-            ]
+            _build_back_row(
+                back_action=back_action,
+                back_text=back_text,
+                show_cancel=show_cancel,
+            )
         ]
     )
 
@@ -269,3 +256,25 @@ def get_create_habit_confirm_keyboard() -> InlineKeyboardMarkup:
             ],
         ]
     )
+
+
+def _build_back_row(
+    *,
+    back_action: str,
+    back_text: str = "⬅️ Назад",
+    show_cancel: bool = True,
+) -> list[InlineKeyboardButton]:
+    row = [
+        InlineKeyboardButton(
+            text=back_text,
+            callback_data=CreateHabitCallback(action=back_action).pack(),
+        )
+    ]
+    if show_cancel:
+        row.append(
+            InlineKeyboardButton(
+                text="Отмена",
+                callback_data=CreateHabitCallback(action="cancel").pack(),
+            )
+        )
+    return row

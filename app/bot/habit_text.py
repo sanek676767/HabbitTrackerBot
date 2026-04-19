@@ -14,7 +14,7 @@ def build_habit_card_text(habit_card: HabitCard) -> str:
     reminder_status = (
         habit_card.reminder_time.strftime("%H:%M")
         if habit_card.reminder_enabled and habit_card.reminder_time is not None
-        else "выключено"
+        else "без напоминания"
     )
     active_status = "активна" if habit_card.is_active else "в архиве"
 
@@ -31,7 +31,7 @@ def build_habit_card_text(habit_card: HabitCard) -> str:
     ]
 
     if habit_card.goal is None:
-        lines.append("Цель: не задана")
+        lines.append("Цель: без цели")
     else:
         lines.append(f"Цель: {habit_card.goal.goal_text}")
         lines.append(f"Прогресс: {habit_card.goal.progress_text}")
@@ -45,7 +45,7 @@ def build_habit_edit_menu_text(habit_card: HabitCard) -> str:
     reminder_text = (
         habit_card.reminder_time.strftime("%H:%M")
         if habit_card.reminder_enabled and habit_card.reminder_time is not None
-        else "выключено"
+        else "без напоминания"
     )
 
     lines = [
@@ -56,7 +56,7 @@ def build_habit_edit_menu_text(habit_card: HabitCard) -> str:
     ]
 
     if habit_card.goal is None:
-        lines.append("Цель: не задана")
+        lines.append("Цель: без цели")
     else:
         lines.append(f"Цель: {habit_card.goal.goal_text}")
         lines.append(f"Прогресс цели: {habit_card.goal.progress_text}")
