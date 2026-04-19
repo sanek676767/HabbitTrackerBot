@@ -43,6 +43,7 @@ class HabitLogRepository:
             .where(
                 Habit.user_id == user_id,
                 Habit.is_active.is_(True),
+                Habit.is_paused.is_(False),
                 Habit.is_deleted.is_(False),
                 HabitLog.completed_for_date == target_date,
             )
@@ -70,7 +71,10 @@ class HabitLogRepository:
             )
         )
         if active_only:
-            statement = statement.where(Habit.is_active.is_(True))
+            statement = statement.where(
+                Habit.is_active.is_(True),
+                Habit.is_paused.is_(False),
+            )
 
         result = await self._session.scalar(statement)
         return int(result or 0)
@@ -86,6 +90,7 @@ class HabitLogRepository:
             .where(
                 Habit.user_id == user_id,
                 Habit.is_active.is_(True),
+                Habit.is_paused.is_(False),
                 Habit.is_deleted.is_(False),
                 HabitLog.completed_for_date == target_date,
             )
@@ -145,7 +150,10 @@ class HabitLogRepository:
             .order_by(Habit.id.asc())
         )
         if active_only:
-            statement = statement.where(Habit.is_active.is_(True))
+            statement = statement.where(
+                Habit.is_active.is_(True),
+                Habit.is_paused.is_(False),
+            )
 
         result = await self._session.execute(statement)
         return [

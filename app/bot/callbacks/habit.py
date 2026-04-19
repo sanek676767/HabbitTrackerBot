@@ -93,6 +93,16 @@ class HabitArchiveCallback(CallbackData, prefix="habit_archive"):
     source: str
 
 
+class HabitPauseCallback(CallbackData, prefix="habit_pause"):
+    habit_id: int
+    source: str
+
+
+class HabitResumeCallback(CallbackData, prefix="habit_resume"):
+    habit_id: int
+    source: str
+
+
 class HabitRestoreCallback(CallbackData, prefix="habit_restore"):
     habit_id: int
     source: str

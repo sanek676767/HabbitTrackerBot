@@ -33,6 +33,8 @@ def make_habit(**overrides: object) -> SimpleNamespace:
         "week_days_mask": None,
         "start_date": date(2026, 4, 4),
         "is_active": True,
+        "is_paused": False,
+        "paused_at": None,
         "is_deleted": False,
         "reminder_enabled": False,
         "reminder_time": None,

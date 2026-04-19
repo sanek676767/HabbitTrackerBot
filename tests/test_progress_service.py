@@ -64,6 +64,14 @@ def build_service() -> ProgressService:
         start_date=date(2026, 3, 29),
         last_completed_at=datetime(2026, 4, 1, 19, 0, tzinfo=timezone.utc),
     )
+    paused_habit = make_habit(
+        id=4,
+        title="Планка",
+        start_date=date(2026, 3, 29),
+        is_paused=True,
+        paused_at=datetime(2026, 4, 4, 10, 0, tzinfo=timezone.utc),
+        last_completed_at=datetime(2026, 4, 4, 7, 45, tzinfo=timezone.utc),
+    )
 
     completion_rows = [
         (1, date(2026, 3, 29)),
@@ -73,13 +81,14 @@ def build_service() -> ProgressService:
         (2, date(2026, 4, 2)),
         (2, date(2026, 4, 4)),
         (3, date(2026, 4, 1)),
+        (4, date(2026, 4, 4)),
     ]
 
     return ProgressService(
         session=None,
         habit_repository=FakeHabitRepository(
-            active_habits=[daily_habit, interval_habit, weekdays_habit],
-            last_completed_habits=[interval_habit, weekdays_habit, daily_habit],
+            active_habits=[daily_habit, interval_habit, weekdays_habit, paused_habit],
+            last_completed_habits=[paused_habit, interval_habit, weekdays_habit, daily_habit],
         ),
         habit_log_repository=FakeHabitLogRepository(completion_rows),
     )
@@ -123,3 +132,26 @@ async def test_progress_screen_data_aggregates_schedule_aware_values() -> None:
     assert result.best_current_streak_value == 3
     assert result.last_completed_habit_title == "Прогулка"
     assert result.last_completed_at == datetime(2026, 4, 4, 9, 30, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_daily_summary_excludes_paused_habits() -> None:
+    service = build_service()
+
+    result = await service.get_daily_progress_summary(1, date(2026, 4, 4))
+
+    assert result.active_habits_count == 3
+    assert result.due_today_count == 2
+    assert result.completed_today_count == 1
+    assert result.remaining_today_count == 1
+
+
+@pytest.mark.asyncio
+async def test_weekly_summary_excludes_paused_habits() -> None:
+    service = build_service()
+
+    result = await service.get_weekly_progress_summary(1, date(2026, 4, 4))
+
+    assert result.total_completions == 7
+    assert result.best_habit_title == "Зарядка"
+    assert "Планка" not in result.problem_habits

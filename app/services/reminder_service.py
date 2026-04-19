@@ -36,6 +36,8 @@ class ReminderService:
         for habit in due_habits:
             if habit.user is None or habit.user.utc_offset_minutes is None:
                 continue
+            if getattr(habit, "is_paused", False):
+                continue
             if habit.reminder_time is None:
                 continue
 

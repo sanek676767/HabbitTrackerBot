@@ -50,6 +50,10 @@ class HabitArchivedError(HabitServiceError):
     pass
 
 
+class HabitPausedError(HabitServiceError):
+    pass
+
+
 class HabitDeletedError(HabitServiceError):
     pass
 
@@ -67,6 +71,7 @@ class HabitListItem:
     id: int
     title: str
     is_completed_today: bool = False
+    is_paused: bool = False
 
 
 @dataclass(slots=True)
@@ -89,6 +94,7 @@ class HabitCard:
     reminder_time: time | None
     frequency_text: str
     goal: HabitGoalProgress | None
+    is_paused: bool = False
 
 
 @dataclass(slots=True)
@@ -104,6 +110,8 @@ class HabitStats:
     created_at: datetime
     frequency_text: str
     goal: HabitGoalProgress | None
+    is_active: bool = True
+    is_paused: bool = False
 
 
 @dataclass(slots=True)
@@ -335,6 +343,17 @@ class HabitService:
         habits = await self._habit_repository.get_active_habits_by_user(user_id)
         return [HabitListItem(id=habit.id, title=habit.title) for habit in habits]
 
+    async def get_visible_habits(self, user_id: int) -> list[HabitListItem]:
+        habits = await self._habit_repository.get_visible_habits_by_user(user_id)
+        return [
+            HabitListItem(
+                id=habit.id,
+                title=habit.title,
+                is_paused=habit.is_paused,
+            )
+            for habit in habits
+        ]
+
     async def get_archived_habits(self, user_id: int) -> list[HabitListItem]:
         habits = await self._habit_repository.get_archived_habits_by_user(user_id)
         return [HabitListItem(id=habit.id, title=habit.title) for habit in habits]
@@ -355,12 +374,15 @@ class HabitService:
             reminder_time=habit.reminder_time,
             frequency_text=progress.frequency_text,
             goal=progress.goal,
+            is_paused=habit.is_paused,
         )
 
     async def complete_habit_for_today(self, user_id: int, habit_id: int) -> HabitCard:
         habit = await self._get_visible_user_habit(user_id, habit_id)
         if not habit.is_active:
             raise HabitArchivedError("Архивную привычку нельзя отметить.")
+        if habit.is_paused:
+            raise HabitPausedError("Привычка на паузе. Сначала возобнови её.")
 
         today = self._get_today()
         # Отметка выполнения зависит от расписания: привычку можно закрыть
@@ -407,6 +429,8 @@ class HabitService:
             created_at=habit.created_at,
             frequency_text=progress.frequency_text,
             goal=progress.goal,
+            is_active=habit.is_active,
+            is_paused=habit.is_paused,
         )
 
     async def get_habit_history(
@@ -455,6 +479,26 @@ class HabitService:
         await self._habit_repository.archive_habit(habit)
         await self._session.commit()
         return True
+
+    async def pause_habit(self, user_id: int, habit_id: int) -> HabitCard:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        if not habit.is_active:
+            raise HabitArchivedError("Архивную привычку нельзя поставить на паузу.")
+        if not habit.is_paused:
+            await self._habit_repository.pause_habit(habit)
+            await self._session.commit()
+            await self._session.refresh(habit)
+        return await self.get_habit_card(user_id, habit_id)
+
+    async def resume_habit(self, user_id: int, habit_id: int) -> HabitCard:
+        habit = await self._get_visible_user_habit(user_id, habit_id)
+        if not habit.is_active:
+            raise HabitArchivedError("Сначала верни привычку из архива.")
+        if habit.is_paused:
+            await self._habit_repository.resume_habit(habit)
+            await self._session.commit()
+            await self._session.refresh(habit)
+        return await self.get_habit_card(user_id, habit_id)
 
     async def restore_habit(self, user_id: int, habit_id: int) -> bool:
         habit = await self._get_visible_user_habit(user_id, habit_id)
@@ -597,20 +641,34 @@ class HabitService:
         completion_dates = await self._habit_log_repository.get_completion_dates(habit.id)
         completion_date_set = set(completion_dates)
         today = self._get_today()
+        progress_reference_date = (
+            today
+            if today in completion_date_set
+            else self._get_progress_reference_date(habit, today)
+        )
+        goal_target_date = (
+            progress_reference_date
+            if habit.goal_type == HabitGoalService.STREAK
+            else today
+        )
 
         return HabitProgressSummary(
             total_completions=len(completion_dates),
             is_completed_today=today in completion_date_set,
-            is_due_today=HabitScheduleService.is_habit_due_on_date(habit, today),
+            is_due_today=(
+                habit.is_active
+                and not habit.is_paused
+                and HabitScheduleService.is_habit_due_on_date(habit, today)
+            ),
             current_streak=HabitScheduleService.calculate_current_streak(
                 habit,
                 completion_date_set,
-                today,
+                progress_reference_date,
             ),
             best_streak=HabitScheduleService.calculate_best_streak(
                 habit,
                 completion_date_set,
-                today,
+                progress_reference_date,
             ),
             last_7_days_progress_text=self._build_last_7_days_progress_text(
                 habit,
@@ -621,7 +679,7 @@ class HabitService:
             goal=HabitGoalService.calculate_progress(
                 habit,
                 completion_dates,
-                today,
+                goal_target_date,
             ),
         )
 
@@ -655,10 +713,19 @@ class HabitService:
             if completion_dates is not None
             else await self._habit_log_repository.get_completion_dates(habit.id)
         )
+        progress_target_date = (
+            (
+                resolved_target_date
+                if resolved_target_date in resolved_completion_dates
+                else self._get_progress_reference_date(habit, resolved_target_date)
+            )
+            if habit.goal_type == HabitGoalService.STREAK
+            else resolved_target_date
+        )
         progress = HabitGoalService.calculate_progress(
             habit,
             resolved_completion_dates,
-            resolved_target_date,
+            progress_target_date,
         )
         # Сохраняем вычисленный момент достижения цели прямо в привычке,
         # чтобы карточки, напоминания и аналитика читали одно состояние.
@@ -672,16 +739,21 @@ class HabitService:
         completion_dates: set[date],
         today: date,
     ) -> str:
+        pause_start_date = HabitService._get_pause_start_date(habit, today)
         days = [
             today - timedelta(days=offset)
             for offset in reversed(range(LAST_7_DAYS_WINDOW))
         ]
         lines: list[str] = []
         for day in days:
-            if HabitScheduleService.is_habit_due_on_date(habit, day):
+            if day in completion_dates:
+                marker = "✅"
+            elif pause_start_date is not None and day >= pause_start_date:
+                marker = "⏸"
+            elif HabitScheduleService.is_habit_due_on_date(habit, day):
                 # Различаем "пропущено" и "не запланировано", чтобы пользователь
                 # видел, где действительно есть сбой, а где просто свободный день.
-                marker = "✅" if day in completion_dates else "⬜"
+                marker = "⬜"
             else:
                 marker = "—"
             lines.append(f"{day.strftime('%d.%m')}: {marker}")
@@ -712,6 +784,21 @@ class HabitService:
     def _ensure_reminder_can_be_enabled(habit: Habit) -> None:
         if not habit.is_active:
             raise HabitArchivedError("Для архивной привычки напоминание недоступно.")
+
+    @staticmethod
+    def _get_pause_start_date(habit: Habit, today: date | None = None) -> date | None:
+        if not habit.is_paused:
+            return None
+        if habit.paused_at is None:
+            return today or date.today()
+        return habit.paused_at.date()
+
+    @classmethod
+    def _get_progress_reference_date(cls, habit: Habit, today: date) -> date:
+        pause_start_date = cls._get_pause_start_date(habit, today)
+        if pause_start_date is None:
+            return today
+        return min(today, pause_start_date - timedelta(days=1))
 
     @staticmethod
     def _get_today() -> date:

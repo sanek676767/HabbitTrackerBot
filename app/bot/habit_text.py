@@ -4,7 +4,11 @@ from app.services.habit_service import HabitCard, HabitHistory, HabitStats
 
 
 def build_habit_card_text(habit_card: HabitCard) -> str:
-    if habit_card.is_completed_today:
+    if habit_card.is_paused and habit_card.is_completed_today:
+        today_status = "выполнена, сейчас на паузе"
+    elif habit_card.is_paused:
+        today_status = "временно приостановлена"
+    elif habit_card.is_completed_today:
         today_status = "выполнена"
     elif habit_card.is_due_today:
         today_status = "ждёт отметку"
@@ -16,7 +20,10 @@ def build_habit_card_text(habit_card: HabitCard) -> str:
         if habit_card.reminder_enabled and habit_card.reminder_time is not None
         else "без напоминания"
     )
-    active_status = "активна" if habit_card.is_active else "в архиве"
+    active_status = _format_habit_status(
+        is_active=habit_card.is_active,
+        is_paused=habit_card.is_paused,
+    )
 
     lines = [
         f"📌 {html.quote(habit_card.title)}",
@@ -29,6 +36,14 @@ def build_habit_card_text(habit_card: HabitCard) -> str:
         f"Напоминание: {reminder_status}",
         f"Статус: {active_status}",
     ]
+
+    if habit_card.is_paused:
+        lines.extend(
+            [
+                "",
+                "Пока привычка на паузе, она не участвует в ежедневном списке и напоминаниях.",
+            ]
+        )
 
     if habit_card.goal is None:
         lines.append("Цель: без цели")
@@ -53,6 +68,9 @@ def build_habit_edit_menu_text(habit_card: HabitCard) -> str:
         "",
         f"Частота: {habit_card.frequency_text}",
         f"Напоминание: {reminder_text}",
+        (
+            f"Статус: {_format_habit_status(is_active=habit_card.is_active, is_paused=habit_card.is_paused)}"
+        ),
     ]
 
     if habit_card.goal is None:
@@ -86,6 +104,9 @@ def build_habit_stats_text(stats: HabitStats) -> str:
         f"Текущая серия: {stats.current_streak}",
         f"Лучшая серия: {stats.best_streak}",
         f"Всего отметок: {stats.total_completions}",
+        (
+            f"Статус: {_format_habit_status(is_active=stats.is_active, is_paused=stats.is_paused)}"
+        ),
     ]
 
     if stats.goal is None:
@@ -150,3 +171,11 @@ def _format_days_label(days: int) -> str:
     if 2 <= days % 10 <= 4:
         return "дня"
     return "дней"
+
+
+def _format_habit_status(*, is_active: bool, is_paused: bool) -> str:
+    if not is_active:
+        return "в архиве"
+    if is_paused:
+        return "на паузе"
+    return "активна"

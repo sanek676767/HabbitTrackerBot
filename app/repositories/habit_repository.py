@@ -58,6 +58,27 @@ class HabitRepository:
             .where(
                 Habit.user_id == user_id,
                 Habit.is_active.is_(True),
+                Habit.is_paused.is_(False),
+                Habit.is_deleted.is_(False),
+            )
+            .order_by(Habit.created_at.asc(), Habit.id.asc())
+        )
+        statement = self._apply_pagination(statement, limit=limit, offset=offset)
+        result = await self._session.scalars(statement)
+        return list(result)
+
+    async def get_visible_habits_by_user(
+        self,
+        user_id: int,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Habit]:
+        statement = (
+            select(Habit)
+            .where(
+                Habit.user_id == user_id,
+                Habit.is_active.is_(True),
                 Habit.is_deleted.is_(False),
             )
             .order_by(Habit.created_at.asc(), Habit.id.asc())
@@ -136,11 +157,27 @@ class HabitRepository:
 
     async def archive_habit(self, habit: Habit) -> Habit:
         habit.is_active = False
+        habit.is_paused = False
+        habit.paused_at = None
         await self._session.flush()
         return habit
 
     async def restore_habit(self, habit: Habit) -> Habit:
         habit.is_active = True
+        habit.is_paused = False
+        habit.paused_at = None
+        await self._session.flush()
+        return habit
+
+    async def pause_habit(self, habit: Habit) -> Habit:
+        habit.is_paused = True
+        habit.paused_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return habit
+
+    async def resume_habit(self, habit: Habit) -> Habit:
+        habit.is_paused = False
+        habit.paused_at = None
         await self._session.flush()
         return habit
 
@@ -150,6 +187,8 @@ class HabitRepository:
         # Восстановленные привычки возвращаются в архив, чтобы пользователь
         # сам явно решил, когда снова сделать их активными.
         habit.is_active = False
+        habit.is_paused = False
+        habit.paused_at = None
         await self._session.flush()
         return habit
 
@@ -229,6 +268,7 @@ class HabitRepository:
                 # Сразу отфильтровываем всё, что точно не может дать напоминание,
                 # чтобы сервисный слой проверял только релевантные записи.
                 Habit.is_active.is_(True),
+                Habit.is_paused.is_(False),
                 Habit.is_deleted.is_(False),
                 Habit.reminder_enabled.is_(True),
                 User.is_blocked.is_(False),
@@ -260,7 +300,9 @@ class HabitRepository:
 
     async def soft_delete_habit(self, habit: Habit) -> Habit:
         habit.is_active = False
+        habit.is_paused = False
         habit.is_deleted = True
+        habit.paused_at = None
         habit.deleted_at = datetime.now(timezone.utc)
         await self._session.flush()
         return habit
@@ -269,6 +311,7 @@ class HabitRepository:
         statement = select(func.count(Habit.id)).where(
             Habit.user_id == user_id,
             Habit.is_active.is_(True),
+            Habit.is_paused.is_(False),
             Habit.is_deleted.is_(False),
         )
         result = await self._session.scalar(statement)

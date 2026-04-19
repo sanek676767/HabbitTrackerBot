@@ -107,6 +107,7 @@ async def return_from_edit_menu(
             callback_data.source,
             is_completed_today=habit_card.is_completed_today,
             is_active=habit_card.is_active,
+            is_paused=habit_card.is_paused,
             is_due_today=habit_card.is_due_today,
         ),
     )

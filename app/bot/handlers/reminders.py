@@ -88,6 +88,7 @@ async def open_reminder_menu(
             reminder_state,
             local_time_status,
             habit_card.is_active,
+            habit_card.is_paused,
         ),
         reply_markup=get_habit_reminder_menu_keyboard(
             habit_id=habit_card.id,
@@ -477,6 +478,7 @@ def _build_reminder_menu_text(
     reminder_state: HabitReminderState,
     local_time_status: str | None,
     is_active: bool,
+    is_paused: bool,
 ) -> str:
     reminder_time = (
         reminder_state.reminder_time.strftime("%H:%M")
@@ -502,6 +504,13 @@ def _build_reminder_menu_text(
             [
                 "",
                 "Для архивной привычки напоминание недоступно.",
+            ]
+        )
+    elif is_paused:
+        lines.extend(
+            [
+                "",
+                "Пока привычка на паузе, напоминания по ней не отправляются.",
             ]
         )
     elif reminder_state.enabled:

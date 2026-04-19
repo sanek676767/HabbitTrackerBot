@@ -15,11 +15,13 @@ from app.bot.callbacks import (
     HabitHistoryCallback,
     HabitListCallback,
     HabitListSource,
+    HabitPauseCallback,
     HabitReturnTarget,
     HabitReminderCancelCallback,
     HabitReminderDisableCallback,
     HabitReminderMenuCallback,
     HabitReminderSetTimeCallback,
+    HabitResumeCallback,
     HabitRestoreCallback,
     HabitStatsCallback,
     HabitViewCallback,
@@ -42,6 +44,8 @@ def get_habits_list_keyboard(
         if show_completion_status:
             status_icon = "✅" if habit.is_completed_today else "⬜"
             button_text = f"{status_icon} {habit.title}"
+        elif habit.is_paused:
+            button_text = f"⏸ {habit.title}"
 
         rows.append(
             [
@@ -84,11 +88,12 @@ def get_habit_card_keyboard(
     *,
     is_completed_today: bool,
     is_active: bool,
+    is_paused: bool,
     is_due_today: bool,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
 
-    if is_active and is_due_today and not is_completed_today:
+    if is_active and not is_paused and is_due_today and not is_completed_today:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -97,6 +102,26 @@ def get_habit_card_keyboard(
                         habit_id=habit_id,
                         source=source,
                     ).pack(),
+                )
+            ]
+        )
+
+    if is_active:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="▶️ Возобновить" if is_paused else "⏸ Пауза",
+                    callback_data=(
+                        HabitResumeCallback(
+                            habit_id=habit_id,
+                            source=source,
+                        ).pack()
+                        if is_paused
+                        else HabitPauseCallback(
+                            habit_id=habit_id,
+                            source=source,
+                        ).pack()
+                    ),
                 )
             ]
         )

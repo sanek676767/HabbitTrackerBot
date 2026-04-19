@@ -59,6 +59,16 @@ class Habit(IdMixin, CreatedAtMixin, UpdatedAtMixin, Base):
         default=True,
         server_default=text("true"),
     )
+    is_paused: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    paused_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     is_deleted: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

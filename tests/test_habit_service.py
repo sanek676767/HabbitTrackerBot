@@ -6,8 +6,10 @@ import pytest
 
 from app.services.habit_goal_service import HabitGoalService
 from app.services.habit_service import (
+    HabitArchivedError,
     HabitDeletedError,
     HabitNotDueTodayError,
+    HabitPausedError,
     HabitService,
     HabitValidationError,
 )
@@ -21,6 +23,8 @@ class FakeHabitRepository:
         self.active_habits = list(active_habits or [])
         self.create_called = False
         self.archive_called = False
+        self.pause_called = False
+        self.resume_called = False
         self.restore_called = False
         self.soft_delete_called = False
 
@@ -62,7 +66,21 @@ class FakeHabitRepository:
         return self.habit
 
     async def get_active_habits_by_user(self, user_id: int):
-        return [habit for habit in self.active_habits if habit.user_id == user_id]
+        return [
+            habit
+            for habit in self.active_habits
+            if habit.user_id == user_id
+            and habit.is_active
+            and not habit.is_paused
+            and not habit.is_deleted
+        ]
+
+    async def get_visible_habits_by_user(self, user_id: int):
+        return [
+            habit
+            for habit in self.active_habits
+            if habit.user_id == user_id and habit.is_active and not habit.is_deleted
+        ]
 
     async def get_archived_habits_by_user(self, user_id: int):
         return [
@@ -121,6 +139,20 @@ class FakeHabitRepository:
     async def archive_habit(self, habit):
         self.archive_called = True
         habit.is_active = False
+        habit.is_paused = False
+        habit.paused_at = None
+        return habit
+
+    async def pause_habit(self, habit):
+        self.pause_called = True
+        habit.is_paused = True
+        habit.paused_at = datetime.now(timezone.utc)
+        return habit
+
+    async def resume_habit(self, habit):
+        self.resume_called = True
+        habit.is_paused = False
+        habit.paused_at = None
         return habit
 
     async def restore_habit(self, habit):
@@ -131,7 +163,9 @@ class FakeHabitRepository:
     async def soft_delete_habit(self, habit):
         self.soft_delete_called = True
         habit.is_active = False
+        habit.is_paused = False
         habit.is_deleted = True
+        habit.paused_at = None
         habit.deleted_at = datetime.now(timezone.utc)
         return habit
 
@@ -143,7 +177,12 @@ class FakeHabitRepository:
         return sum(
             1
             for habit in self.active_habits
-            if habit.user_id == user_id and habit.is_active and not habit.is_deleted
+            if (
+                habit.user_id == user_id
+                and habit.is_active
+                and not habit.is_paused
+                and not habit.is_deleted
+            )
         )
 
 
@@ -264,6 +303,45 @@ async def test_get_today_habits_returns_only_due_habits(dummy_session, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_get_visible_habits_keeps_paused_habit_in_main_list(dummy_session) -> None:
+    active_habit = make_habit(id=1, user_id=1, title="Daily")
+    paused_habit = make_habit(id=2, user_id=1, title="Read", is_paused=True)
+    service = build_service(
+        dummy_session,
+        active_habits=[active_habit, paused_habit],
+    )
+
+    result = await service.get_visible_habits(1)
+
+    assert [item.id for item in result] == [1, 2]
+    assert result[0].is_paused is False
+    assert result[1].is_paused is True
+
+
+@pytest.mark.asyncio
+async def test_get_today_habits_skips_paused_habit(dummy_session, monkeypatch) -> None:
+    target_date = date(2026, 4, 4)
+    active_habit = make_habit(id=1, user_id=1, title="Daily", start_date=date(2026, 4, 1))
+    paused_habit = make_habit(
+        id=2,
+        user_id=1,
+        title="Paused",
+        start_date=date(2026, 4, 1),
+        is_paused=True,
+    )
+    service = build_service(
+        dummy_session,
+        active_habits=[active_habit, paused_habit],
+        completed_today_ids=[1, 2],
+    )
+    monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
+
+    result = await service.get_today_habits(1)
+
+    assert [item.id for item in result] == [1]
+
+
+@pytest.mark.asyncio
 async def test_complete_habit_rejects_when_not_due_today(dummy_session, monkeypatch) -> None:
     target_date = date(2026, 4, 4)
     weekdays_mask = HabitScheduleService.build_week_days_mask([0, 2, 4])
@@ -278,6 +356,23 @@ async def test_complete_habit_rejects_when_not_due_today(dummy_session, monkeypa
     monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
 
     with pytest.raises(HabitNotDueTodayError):
+        await service.complete_habit_for_today(1, 5)
+
+
+@pytest.mark.asyncio
+async def test_complete_habit_rejects_when_habit_is_paused(dummy_session, monkeypatch) -> None:
+    target_date = date(2026, 4, 4)
+    habit = make_habit(
+        id=5,
+        user_id=1,
+        start_date=date(2026, 4, 1),
+        is_paused=True,
+        paused_at=datetime(2026, 4, 4, 9, 0, tzinfo=timezone.utc),
+    )
+    service = build_service(dummy_session, habit=habit)
+    monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
+
+    with pytest.raises(HabitPausedError):
         await service.complete_habit_for_today(1, 5)
 
 
@@ -410,14 +505,72 @@ async def test_clear_habit_goal_removes_goal_from_card(dummy_session, monkeypatc
 
 @pytest.mark.asyncio
 async def test_archive_habit_marks_inactive_and_commits(dummy_session) -> None:
-    habit = make_habit(id=5, user_id=1, is_active=True)
+    habit = make_habit(
+        id=5,
+        user_id=1,
+        is_active=True,
+        is_paused=True,
+        paused_at=datetime(2026, 4, 4, 9, 0, tzinfo=timezone.utc),
+    )
     service = build_service(dummy_session, habit=habit)
 
     result = await service.archive_habit(1, 5)
 
     assert result is True
     assert habit.is_active is False
+    assert habit.is_paused is False
+    assert habit.paused_at is None
     assert dummy_session.commit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_pause_habit_marks_habit_paused_and_commits(dummy_session) -> None:
+    habit = make_habit(id=5, user_id=1, is_active=True, is_paused=False)
+    service = build_service(dummy_session, habit=habit)
+
+    card = await service.pause_habit(1, 5)
+
+    assert habit.is_paused is True
+    assert habit.paused_at is not None
+    assert card.is_paused is True
+    assert dummy_session.commit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_resume_habit_clears_pause_and_commits(dummy_session) -> None:
+    habit = make_habit(
+        id=5,
+        user_id=1,
+        is_active=True,
+        is_paused=True,
+        paused_at=datetime(2026, 4, 4, 9, 0, tzinfo=timezone.utc),
+    )
+    service = build_service(dummy_session, habit=habit)
+
+    card = await service.resume_habit(1, 5)
+
+    assert habit.is_paused is False
+    assert habit.paused_at is None
+    assert card.is_paused is False
+    assert dummy_session.commit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_pause_habit_rejects_archived_habit(dummy_session) -> None:
+    habit = make_habit(id=5, user_id=1, is_active=False)
+    service = build_service(dummy_session, habit=habit)
+
+    with pytest.raises(HabitArchivedError):
+        await service.pause_habit(1, 5)
+
+
+@pytest.mark.asyncio
+async def test_resume_habit_rejects_archived_habit(dummy_session) -> None:
+    habit = make_habit(id=5, user_id=1, is_active=False, is_paused=True)
+    service = build_service(dummy_session, habit=habit)
+
+    with pytest.raises(HabitArchivedError):
+        await service.resume_habit(1, 5)
 
 
 @pytest.mark.asyncio
@@ -452,3 +605,29 @@ async def test_soft_delete_habit_rejects_already_deleted(dummy_session) -> None:
 
     with pytest.raises(HabitDeletedError):
         await service.soft_delete_habit(1, 8)
+
+
+@pytest.mark.asyncio
+async def test_paused_habit_remains_available_in_card_and_history(dummy_session, monkeypatch) -> None:
+    target_date = date(2026, 4, 10)
+    habit = make_habit(
+        id=9,
+        user_id=1,
+        title="Read",
+        start_date=date(2026, 4, 1),
+        is_paused=True,
+        paused_at=datetime(2026, 4, 10, 8, 30, tzinfo=timezone.utc),
+    )
+    service = build_service(
+        dummy_session,
+        habit=habit,
+        completed_dates={9: [date(2026, 4, 8), date(2026, 4, 9)]},
+    )
+    monkeypatch.setattr(HabitService, "_get_today", staticmethod(lambda: target_date))
+
+    card = await service.get_habit_card(1, 9)
+    history = await service.get_habit_history(1, 9, days=7)
+
+    assert card.is_paused is True
+    assert history.habit_id == 9
+    assert len(history.entries) == 7

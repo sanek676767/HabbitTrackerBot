@@ -88,7 +88,9 @@ class ProgressService:
         target_date: date | None = None,
     ) -> DailyProgressSummary:
         summary_date = target_date or self._get_today()
-        active_habits = await self._habit_repository.get_active_habits_by_user(user_id)
+        active_habits = self._exclude_paused_habits(
+            await self._habit_repository.get_active_habits_by_user(user_id)
+        )
         due_today_habits = [
             habit
             for habit in active_habits
@@ -121,7 +123,9 @@ class ProgressService:
     ) -> WeeklyProgressSummary:
         summary_date = target_date or self._get_today()
         week_start = summary_date - timedelta(days=SEVEN_DAY_WINDOW - 1)
-        active_habits = await self._habit_repository.get_active_habits_by_user(user_id)
+        active_habits = self._exclude_paused_habits(
+            await self._habit_repository.get_active_habits_by_user(user_id)
+        )
         weekly_counts = await self._get_completion_count_map_for_period(
             active_habits,
             week_start,
@@ -179,7 +183,9 @@ class ProgressService:
         daily_summary = await self.get_daily_progress_summary(user_id, progress_date)
         rate_7_days = await self.get_completion_rate(user_id, SEVEN_DAY_WINDOW, progress_date)
         rate_30_days = await self.get_completion_rate(user_id, THIRTY_DAY_WINDOW, progress_date)
-        active_habits = await self._habit_repository.get_active_habits_by_user(user_id)
+        active_habits = self._exclude_paused_habits(
+            await self._habit_repository.get_active_habits_by_user(user_id)
+        )
         streak_snapshots = await self._get_active_habit_streak_snapshots(active_habits, progress_date)
         last_completed_habits = await self.get_last_completed_habits(user_id, limit=1)
 
@@ -221,7 +227,9 @@ class ProgressService:
     ) -> CompletionRate:
         rate_end_date = target_date or self._get_today()
         rate_start_date = rate_end_date - timedelta(days=days - 1)
-        active_habits = await self._habit_repository.get_active_habits_by_user(user_id)
+        active_habits = self._exclude_paused_habits(
+            await self._habit_repository.get_active_habits_by_user(user_id)
+        )
         completed_map = await self._get_completion_count_map_for_period(
             active_habits,
             rate_start_date,
@@ -256,10 +264,18 @@ class ProgressService:
         *,
         limit: int = 1,
     ) -> list[LastCompletedHabit]:
-        habits = await self._habit_repository.get_last_completed_habits_by_user(
-            user_id,
-            limit=limit,
+        habits = self._exclude_paused_habits(
+            await self._habit_repository.get_active_habits_by_user(user_id)
         )
+        habits = sorted(
+            (
+                habit
+                for habit in habits
+                if getattr(habit, "last_completed_at", None) is not None
+            ),
+            key=lambda habit: (habit.last_completed_at, habit.id),
+            reverse=True,
+        )[:limit]
         return [
             LastCompletedHabit(
                 id=habit.id,
@@ -267,8 +283,11 @@ class ProgressService:
                 last_completed_at=habit.last_completed_at,
             )
             for habit in habits
-            if habit.last_completed_at is not None
         ]
+
+    @staticmethod
+    def _exclude_paused_habits(habits: list) -> list:
+        return [habit for habit in habits if not getattr(habit, "is_paused", False)]
 
     async def _get_active_habit_streak_snapshots(
         self,

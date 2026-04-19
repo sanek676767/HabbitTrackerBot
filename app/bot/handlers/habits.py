@@ -9,6 +9,8 @@ from app.bot.callbacks import (
     HabitHistoryCallback,
     HabitListCallback,
     HabitListSource,
+    HabitPauseCallback,
+    HabitResumeCallback,
     HabitRestoreCallback,
     HabitStatsCallback,
     HabitViewCallback,
@@ -33,6 +35,7 @@ from app.services.habit_service import (
     HabitDeletedError,
     HabitNotDueTodayError,
     HabitNotFoundError,
+    HabitPausedError,
     HabitService,
     HabitValidationError,
 )
@@ -120,6 +123,7 @@ async def show_habit_card(
             callback_data.source,
             is_completed_today=habit_card.is_completed_today,
             is_active=habit_card.is_active,
+            is_paused=habit_card.is_paused,
             is_due_today=habit_card.is_due_today,
         ),
     )
@@ -150,7 +154,12 @@ async def complete_habit(
     except HabitDeletedError as error:
         await callback.answer(str(error), show_alert=True)
         return
-    except (HabitArchivedError, HabitAlreadyCompletedError, HabitNotDueTodayError) as error:
+    except (
+        HabitArchivedError,
+        HabitPausedError,
+        HabitAlreadyCompletedError,
+        HabitNotDueTodayError,
+    ) as error:
         await callback.answer(str(error), show_alert=True)
         return
 
@@ -161,6 +170,7 @@ async def complete_habit(
             callback_data.source,
             is_completed_today=habit_card.is_completed_today,
             is_active=habit_card.is_active,
+            is_paused=habit_card.is_paused,
             is_due_today=habit_card.is_due_today,
         ),
     )
@@ -276,6 +286,84 @@ async def archive_habit(
     await callback.answer("Привычка перенесена в архив.")
 
 
+@router.callback_query(HabitPauseCallback.filter())
+async def pause_habit(
+    callback: CallbackQuery,
+    callback_data: HabitPauseCallback,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    if callback.from_user is None or callback.message is None:
+        await callback.answer()
+        return
+
+    user = await user_service.get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала отправь /start.", show_alert=True)
+        return
+
+    try:
+        habit_card = await habit_service.pause_habit(user.id, callback_data.habit_id)
+    except HabitNotFoundError:
+        await callback.answer("Привычка не найдена.", show_alert=True)
+        return
+    except (HabitArchivedError, HabitDeletedError) as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        build_habit_card_text(habit_card),
+        reply_markup=get_habit_card_keyboard(
+            habit_card.id,
+            callback_data.source,
+            is_completed_today=habit_card.is_completed_today,
+            is_active=habit_card.is_active,
+            is_paused=habit_card.is_paused,
+            is_due_today=habit_card.is_due_today,
+        ),
+    )
+    await callback.answer("Привычка на паузе.")
+
+
+@router.callback_query(HabitResumeCallback.filter())
+async def resume_habit(
+    callback: CallbackQuery,
+    callback_data: HabitResumeCallback,
+    user_service: UserService,
+    habit_service: HabitService,
+) -> None:
+    if callback.from_user is None or callback.message is None:
+        await callback.answer()
+        return
+
+    user = await user_service.get_by_telegram_id(callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала отправь /start.", show_alert=True)
+        return
+
+    try:
+        habit_card = await habit_service.resume_habit(user.id, callback_data.habit_id)
+    except HabitNotFoundError:
+        await callback.answer("Привычка не найдена.", show_alert=True)
+        return
+    except (HabitArchivedError, HabitDeletedError) as error:
+        await callback.answer(str(error), show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        build_habit_card_text(habit_card),
+        reply_markup=get_habit_card_keyboard(
+            habit_card.id,
+            callback_data.source,
+            is_completed_today=habit_card.is_completed_today,
+            is_active=habit_card.is_active,
+            is_paused=habit_card.is_paused,
+            is_due_today=habit_card.is_due_today,
+        ),
+    )
+    await callback.answer("Привычка снова активна.")
+
+
 @router.callback_query(HabitRestoreCallback.filter())
 async def restore_habit(
     callback: CallbackQuery,
@@ -378,10 +466,19 @@ async def _build_active_screen(
     user_id: int,
     habit_service: HabitService,
 ) -> tuple[str, InlineKeyboardMarkup | None]:
-    habits = await habit_service.get_active_habits(user_id)
+    habits = await habit_service.get_visible_habits(user_id)
     if habits:
+        has_paused_habits = any(habit.is_paused for habit in habits)
         return (
-            "📋 Мои привычки\n\nОткрой привычку, чтобы посмотреть карточку.",
+            (
+                "📋 Мои привычки\n\n"
+                + (
+                    "⏸ — привычка на паузе. Открой карточку, чтобы возобновить её.\n\n"
+                    if has_paused_habits
+                    else ""
+                )
+                + "Открой привычку, чтобы посмотреть карточку."
+            ),
             get_habits_list_keyboard(
                 habits,
                 HabitListSource.LIST.value,
@@ -392,7 +489,7 @@ async def _build_active_screen(
     archived_habits = await habit_service.get_archived_habits(user_id)
     if archived_habits:
         return (
-            "Активных привычек пока нет.\n\nНиже можно открыть архив.",
+            "Активных привычек и привычек на паузе пока нет.\n\nНиже можно открыть архив.",
             get_habits_list_keyboard(
                 archived_habits,
                 HabitListSource.ARCHIVE.value,
