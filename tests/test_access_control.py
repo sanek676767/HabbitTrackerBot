@@ -1,5 +1,6 @@
 import pytest
 
+from app.bot.main import build_global_commands
 from app.bot.keyboards.main_menu import ADMIN_BUTTON, get_main_menu_keyboard
 from app.services.admin_service import AdminAccessDeniedError, AdminService
 from app.services.user_service import UserService
@@ -54,6 +55,17 @@ def test_user_access_helpers_and_admin_button_visibility() -> None:
 
     assert ADMIN_BUTTON not in _flatten_button_texts(hidden_keyboard)
     assert ADMIN_BUTTON in _flatten_button_texts(visible_keyboard)
+
+
+def test_admin_command_is_not_exposed_in_global_commands() -> None:
+    commands = build_global_commands()
+
+    assert [command.command for command in commands] == [
+        "start",
+        "help",
+        "profile",
+        "feedback",
+    ]
 
 
 @pytest.mark.asyncio

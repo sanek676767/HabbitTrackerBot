@@ -22,6 +22,15 @@ from app.core.redis import close_redis, get_redis
 logger = logging.getLogger(__name__)
 
 
+def build_global_commands() -> list[BotCommand]:
+    return [
+        BotCommand(command="start", description="Открыть бота"),
+        BotCommand(command="help", description="Показать помощь"),
+        BotCommand(command="profile", description="Показать профиль"),
+        BotCommand(command="feedback", description="Отправить обратную связь"),
+    ]
+
+
 async def main() -> None:
     configure_logging()
 
@@ -33,15 +42,7 @@ async def main() -> None:
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    await bot.set_my_commands(
-        [
-            BotCommand(command="start", description="Открыть бота"),
-            BotCommand(command="admin", description="Открыть админку"),
-            BotCommand(command="help", description="Показать помощь"),
-            BotCommand(command="profile", description="Показать профиль"),
-            BotCommand(command="feedback", description="Отправить обратную связь"),
-        ]
-    )
+    await bot.set_my_commands(build_global_commands())
     dispatcher = Dispatcher()
     dispatcher.message.middleware(DbSessionMiddleware())
     dispatcher.callback_query.middleware(DbSessionMiddleware())

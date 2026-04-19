@@ -377,7 +377,10 @@ async def test_complete_habit_rejects_when_habit_is_paused(dummy_session, monkey
 
 
 @pytest.mark.asyncio
-async def test_update_habit_schedule_resets_start_date_to_today(dummy_session, monkeypatch) -> None:
+async def test_update_habit_schedule_reanchors_start_date_to_today_product_rule(
+    dummy_session,
+    monkeypatch,
+) -> None:
     target_date = date(2026, 4, 10)
     habit = make_habit(
         id=5,
@@ -537,6 +540,26 @@ async def test_pause_habit_marks_habit_paused_and_commits(dummy_session) -> None
 
 
 @pytest.mark.asyncio
+async def test_pause_habit_is_noop_when_habit_is_already_paused(dummy_session) -> None:
+    paused_at = datetime(2026, 4, 4, 9, 0, tzinfo=timezone.utc)
+    habit = make_habit(
+        id=5,
+        user_id=1,
+        is_active=True,
+        is_paused=True,
+        paused_at=paused_at,
+    )
+    service = build_service(dummy_session, habit=habit)
+
+    card = await service.pause_habit(1, 5)
+
+    assert habit.is_paused is True
+    assert habit.paused_at == paused_at
+    assert card.is_paused is True
+    assert dummy_session.commit_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_resume_habit_clears_pause_and_commits(dummy_session) -> None:
     habit = make_habit(
         id=5,
@@ -583,6 +606,17 @@ async def test_restore_habit_marks_active_and_commits(dummy_session) -> None:
     assert result is True
     assert habit.is_active is True
     assert dummy_session.commit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_restore_habit_returns_false_for_active_habit(dummy_session) -> None:
+    habit = make_habit(id=5, user_id=1, is_active=True)
+    service = build_service(dummy_session, habit=habit)
+
+    result = await service.restore_habit(1, 5)
+
+    assert result is False
+    assert dummy_session.commit_calls == 0
 
 
 @pytest.mark.asyncio

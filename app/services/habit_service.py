@@ -28,6 +28,10 @@ DEFAULT_HISTORY_PERIOD_DAYS = 7
 LAST_7_DAYS_WINDOW = DEFAULT_HISTORY_PERIOD_DAYS
 SUPPORTED_HISTORY_PERIODS = (7, 14, 30)
 REMINDER_TIME_PATTERN = re.compile(r"^\d{2}:\d{2}$")
+ACTIVE_STATE = "active"
+PAUSED_STATE = "paused"
+ARCHIVED_STATE = "archived"
+DELETED_STATE = "deleted"
 
 
 class HabitServiceError(Exception):
@@ -220,11 +224,12 @@ class HabitService:
         week_days_mask: int | None = None,
     ) -> HabitCard:
         habit = await self._get_visible_user_habit(user_id, habit_id)
+        schedule_start_date = self._resolve_schedule_update_start_date(habit)
         schedule = self.build_schedule_config(
             frequency_type=frequency_type,
             frequency_interval=frequency_interval,
             week_days_mask=week_days_mask,
-            start_date=self._get_today(),
+            start_date=schedule_start_date,
         )
 
         await self._habit_repository.update_schedule(
@@ -234,7 +239,7 @@ class HabitService:
             week_days_mask=schedule.week_days_mask,
             start_date=schedule.start_date,
         )
-        await self._sync_goal_achievement(habit, target_date=self._get_today())
+        await self._sync_goal_achievement(habit, target_date=schedule_start_date)
         await self._session.commit()
         await self._session.refresh(habit)
         return await self.get_habit_card(user_id, habit_id)
@@ -379,9 +384,11 @@ class HabitService:
 
     async def complete_habit_for_today(self, user_id: int, habit_id: int) -> HabitCard:
         habit = await self._get_visible_user_habit(user_id, habit_id)
-        if not habit.is_active:
-            raise HabitArchivedError("Архивную привычку нельзя отметить.")
-        if habit.is_paused:
+        state = self._ensure_habit_is_not_archived(
+            habit,
+            archived_message="Архивную привычку нельзя отметить.",
+        )
+        if state == PAUSED_STATE:
             raise HabitPausedError("Привычка на паузе. Сначала возобнови её.")
 
         today = self._get_today()
@@ -473,7 +480,7 @@ class HabitService:
 
     async def archive_habit(self, user_id: int, habit_id: int) -> bool:
         habit = await self._get_visible_user_habit(user_id, habit_id)
-        if not habit.is_active:
+        if self._get_habit_state(habit) == ARCHIVED_STATE:
             return False
 
         await self._habit_repository.archive_habit(habit)
@@ -482,9 +489,11 @@ class HabitService:
 
     async def pause_habit(self, user_id: int, habit_id: int) -> HabitCard:
         habit = await self._get_visible_user_habit(user_id, habit_id)
-        if not habit.is_active:
-            raise HabitArchivedError("Архивную привычку нельзя поставить на паузу.")
-        if not habit.is_paused:
+        state = self._ensure_habit_is_not_archived(
+            habit,
+            archived_message="Архивную привычку нельзя поставить на паузу.",
+        )
+        if state == ACTIVE_STATE:
             await self._habit_repository.pause_habit(habit)
             await self._session.commit()
             await self._session.refresh(habit)
@@ -492,9 +501,11 @@ class HabitService:
 
     async def resume_habit(self, user_id: int, habit_id: int) -> HabitCard:
         habit = await self._get_visible_user_habit(user_id, habit_id)
-        if not habit.is_active:
-            raise HabitArchivedError("Сначала верни привычку из архива.")
-        if habit.is_paused:
+        state = self._ensure_habit_is_not_archived(
+            habit,
+            archived_message="Сначала верни привычку из архива.",
+        )
+        if state == PAUSED_STATE:
             await self._habit_repository.resume_habit(habit)
             await self._session.commit()
             await self._session.refresh(habit)
@@ -502,7 +513,7 @@ class HabitService:
 
     async def restore_habit(self, user_id: int, habit_id: int) -> bool:
         habit = await self._get_visible_user_habit(user_id, habit_id)
-        if habit.is_active:
+        if self._get_habit_state(habit) != ARCHIVED_STATE:
             return False
 
         await self._habit_repository.restore_habit(habit)
@@ -511,8 +522,7 @@ class HabitService:
 
     async def soft_delete_habit(self, user_id: int, habit_id: int) -> bool:
         habit = await self._get_user_habit(user_id, habit_id)
-        if habit.is_deleted:
-            raise HabitDeletedError("Эта привычка уже удалена.")
+        self._ensure_habit_not_deleted(habit)
 
         await self._habit_repository.soft_delete_habit(habit)
         await self._session.commit()
@@ -685,8 +695,7 @@ class HabitService:
 
     async def _get_visible_user_habit(self, user_id: int, habit_id: int) -> Habit:
         habit = await self._get_user_habit(user_id, habit_id)
-        if habit.is_deleted:
-            raise HabitDeletedError("Эта привычка уже удалена.")
+        self._ensure_habit_not_deleted(habit)
         return habit
 
     async def _get_user_habit(self, user_id: int, habit_id: int) -> Habit:
@@ -780,10 +789,49 @@ class HabitService:
             raise HabitValidationError("История доступна на 7, 14 или 30 дней.")
         return days
 
+    @classmethod
+    def _ensure_reminder_can_be_enabled(cls, habit: Habit) -> None:
+        cls._ensure_habit_is_not_archived(
+            habit,
+            archived_message="Для архивной привычки напоминание недоступно.",
+        )
+
+    @classmethod
+    def _ensure_habit_not_deleted(cls, habit: Habit) -> None:
+        if cls._get_habit_state(habit) == DELETED_STATE:
+            raise HabitDeletedError("Эта привычка уже удалена.")
+
+    @classmethod
+    def _ensure_habit_is_not_archived(
+        cls,
+        habit: Habit,
+        *,
+        archived_message: str,
+    ) -> str:
+        state = cls._get_habit_state(habit)
+        if state == DELETED_STATE:
+            raise HabitDeletedError("Эта привычка уже удалена.")
+        if state == ARCHIVED_STATE:
+            raise HabitArchivedError(archived_message)
+        return state
+
     @staticmethod
-    def _ensure_reminder_can_be_enabled(habit: Habit) -> None:
+    def _resolve_schedule_update_start_date(habit: Habit) -> date:
+        del habit
+        # Правило продукта: новое расписание начинает действовать с сегодняшнего
+        # дня, чтобы не переписывать задним числом due-даты, историю и опорные
+        # точки для стриков.
+        return HabitService._get_today()
+
+    @staticmethod
+    def _get_habit_state(habit: Habit) -> str:
+        if habit.is_deleted:
+            return DELETED_STATE
         if not habit.is_active:
-            raise HabitArchivedError("Для архивной привычки напоминание недоступно.")
+            return ARCHIVED_STATE
+        if habit.is_paused:
+            return PAUSED_STATE
+        return ACTIVE_STATE
 
     @staticmethod
     def _get_pause_start_date(habit: Habit, today: date | None = None) -> date | None:
