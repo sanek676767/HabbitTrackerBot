@@ -1,109 +1,81 @@
-# Habit Tracker Bot
+# HabbitTrackerBot
 
-Telegram-бот для ведения привычек с расписанием, напоминаниями, прогрессом, целями и административной панелью. Проект построен на `aiogram`, `FastAPI`, `SQLAlchemy`, `PostgreSQL`, `Redis` и `Celery`.
+Telegram-бот для системного ведения привычек: с гибкими расписаниями, напоминаниями, целями, историей, прогрессом и административными инструментами. Проект собран как аккуратное многослойное приложение на `aiogram`, `FastAPI`, `SQLAlchemy`, `PostgreSQL`, `Redis` и `Celery`.
 
 ## Возможности
 
-- создание привычек с разным расписанием:
-  - ежедневно
-  - через N дней
-  - по выбранным дням недели
-- отметка выполнения привычки на текущий день
-- статистика по привычке:
-  - текущее и лучшее серии
-  - общее число выполнений
-  - прогресс за последние 7 дней
-- цели по привычке:
-  - по числу выполнений
-  - по длине серии
-- напоминания в локальном времени пользователя
-- экран "Сегодня" только с актуальными привычками
-- экран общего прогресса с метриками за 7 и 30 дней
-- автоматические сводки:
-  - ежедневная в `21:00` по локальному времени
-  - еженедельная в воскресенье в `20:00` по локальному времени
-- обратная связь от пользователей
-- админ-панель:
-  - поиск и просмотр пользователей
-  - блокировка и разблокировка
-  - выдача и снятие админ-прав
-  - просмотр и восстановление удалённых привычек
-  - ответы на обращения
-  - журнал админ-действий
+- Создание привычек с разными сценариями расписания: каждый день, через день, по выбранным дням недели
+- Отметка выполнения на текущий день и работа с экраном "Сегодня"
+- Цели по количеству выполнений и по длине серии
+- История привычки, текущая и лучшая серии, прогресс за последние 7, 14 и 30 дней
+- Напоминания и автоматические сводки в локальном времени пользователя
+- Пауза и мягкое удаление привычек с возможностью восстановления
+- Обратная связь от пользователей
+- Админ-панель: поиск пользователей, блокировка, выдача прав, ответы на обращения, action log, рассылка
 
 ## Стек
 
 - Python 3.10
 - aiogram 3
 - FastAPI
-- SQLAlchemy 2 + Alembic
+- SQLAlchemy 2
+- Alembic
 - PostgreSQL
 - Redis
 - Celery
-- pytest
+- pytest + pytest-asyncio
+- Docker Compose
 
-## Структура проекта
+## Архитектура
+
+Проект собран по простой прикладной схеме: `handlers -> services -> repositories`.
+
+- `handlers` принимают команды и callback-и Telegram, валидируют пользовательский сценарий и передают управление дальше
+- `services` содержат бизнес-логику: привычки, цели, прогресс, напоминания, админские действия, feedback и рассылка
+- `repositories` изолируют работу с базой данных и не смешивают SQL-доступ с логикой сценариев
+- `workers` выполняют фоновые задачи для напоминаний и сводок
+- `api` держит служебный HTTP-слой, в том числе `GET /health`
+
+Ключевые директории:
 
 ```text
 app/
   api/           FastAPI-приложение и healthcheck
-  bot/           Telegram-бот: handlers, callbacks, keyboards, middlewares
-  core/          конфигурация, БД, Redis, логирование
+  bot/           Telegram-бот: handlers, keyboards, middlewares
+  core/          конфигурация, подключение к БД, Redis, логирование
   models/        SQLAlchemy-модели
   repositories/  слой доступа к данным
   services/      бизнес-логика
   workers/       Celery worker и периодические задачи
 migrations/      Alembic-миграции
-tests/           тесты сервисов, диспетчеров и middleware
+tests/           тесты сервисов, handlers и middleware
 ```
 
-## Переменные окружения
+## Запуск локально
 
-Шаблон находится в [.env.example](.env.example).
+Шаблон переменных окружения лежит в [`.env.example`](./.env.example).
 
-Основные переменные:
+### Вариант 1. Через Docker Compose
 
-- `BOT_TOKEN` - токен Telegram-бота
-- `FEEDBACK_CONTACT_USERNAME` - опциональный контакт для поддержки
-- `POSTGRES_*` - параметры подключения к PostgreSQL
-- `REDIS_*` - параметры Redis
-- `CELERY_BROKER_DB` и `CELERY_RESULT_DB` - базы Redis для Celery
-- `REDIS_ENABLED` - если `false`, бот запускает цикл напоминаний и сводок внутри процесса без Celery
-- `API_HOST` и `API_PORT` - параметры FastAPI
-
-Важно: в шаблоне `.env.example` для Docker указаны хосты `postgres` и `redis`. Если запускать приложение локально вне контейнеров, замените их на `localhost`.
-
-## Быстрый старт через Docker Compose
-
-1. Скопируйте `.env.example` в `.env`.
-2. Заполните `BOT_TOKEN`.
+1. Скопируйте `.env.example` в `.env`
+2. Заполните `BOT_TOKEN`
 3. Запустите проект:
 
 ```bash
 docker compose up --build
 ```
 
-Будут подняты сервисы:
-
-- `postgres`
-- `redis`
-- `migrator`
-- `api`
-- `bot`
-- `worker`
-- `beat`
+Будут подняты `postgres`, `redis`, `migrator`, `api`, `bot`, `worker` и `beat`.
 
 После запуска:
 
 - API healthcheck доступен по `http://localhost:8000/health`
-- бот начинает polling в Telegram
-- Celery Beat раз в минуту проверяет напоминания и сводки
+- бот запускается в polling-режиме
+- Celery worker и beat обрабатывают напоминания и сводки
 
-## Локальный запуск без Docker
+### Вариант 2. Без Docker
 
-### 1. Подготовка окружения
-
-PowerShell:
+Подготовка окружения в PowerShell:
 
 ```powershell
 python -m venv .venv
@@ -112,77 +84,69 @@ pip install -r requirements-dev.txt
 Copy-Item .env.example .env
 ```
 
-После этого:
+В `.env` нужно как минимум:
 
-- укажите `BOT_TOKEN`
-- поменяйте `POSTGRES_HOST=localhost`
-- поменяйте `REDIS_HOST=localhost`
+- указать `BOT_TOKEN`
+- заменить `POSTGRES_HOST=postgres` на `POSTGRES_HOST=localhost`
+- заменить `REDIS_HOST=redis` на `REDIS_HOST=localhost`
 
-### 2. Поднимите инфраструктуру
-
-Проще всего оставить PostgreSQL и Redis в Docker:
+Поднять инфраструктуру можно отдельно:
 
 ```bash
 docker compose up -d postgres redis
 ```
 
-### 3. Примените миграции
+Применить миграции:
 
 ```powershell
-python -m alembic upgrade head
+.\.venv\Scripts\python.exe -m alembic upgrade head
 ```
 
-### 4. Запуск сервисов
-
-API:
+Запустить API:
 
 ```powershell
-uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
+.\.venv\Scripts\python.exe -m uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Бот:
+Запустить бота:
 
 ```powershell
-python -m app.bot.main
+.\.venv\Scripts\python.exe -m app.bot.main
 ```
 
-Celery worker:
+Запустить Celery worker:
 
 ```powershell
-celery -A app.workers.celery_app:celery_app worker --loglevel=INFO
+.\.venv\Scripts\celery.exe -A app.workers.celery_app:celery_app worker --loglevel=INFO
 ```
 
-Celery beat:
+Запустить Celery beat:
 
 ```powershell
-celery -A app.workers.celery_app:celery_app beat --loglevel=INFO
+.\.venv\Scripts\celery.exe -A app.workers.celery_app:celery_app beat --loglevel=INFO
 ```
 
-## Упрощённый локальный режим без Redis и Celery
-
-Для разработки можно отключить Redis:
+Для упрощённой локальной разработки можно отключить Redis и Celery:
 
 ```env
 REDIS_ENABLED=false
 ```
 
-В этом режиме бот сам запускает внутренний цикл проверки напоминаний и сводок. Тогда достаточно:
-
-- PostgreSQL
-- миграций
-- процесса `python -m app.bot.main`
-
-API при этом продолжит работать, а `/health` будет возвращать `redis: "disabled"`.
+В этом режиме бот сам запускает внутренний цикл проверки напоминаний и сводок, поэтому достаточно PostgreSQL, миграций и процесса `.\.venv\Scripts\python.exe -m app.bot.main`.
 
 ## Тесты
 
+Запуск тестов:
+
 ```powershell
-pytest -q
+.\.venv\Scripts\python.exe -m pytest -q
 ```
+
+Тесты лежат в каталоге [`tests`](./tests) и покрывают сервисы, обработчики и middleware.
 
 ## Первый администратор
 
-Права администратора выдаются через базу данных. Сначала пользователь должен хотя бы один раз открыть бота через `/start`, чтобы появилась запись в таблице `users`.
+Первый администратор назначается напрямую через базу данных. Перед этим пользователь должен хотя бы один раз открыть бота через `/start`, чтобы появилась запись в таблице `users`.
 
 SQL:
 
@@ -192,43 +156,14 @@ SET is_admin = true
 WHERE telegram_id = 123456789;
 ```
 
-Пример для Docker:
+Пример для Docker Compose:
 
 ```bash
 docker compose exec postgres psql -U habit_user -d habit_tracker -c "UPDATE users SET is_admin = true WHERE telegram_id = 123456789;"
 ```
 
-После этого у пользователя появится раздел админки.
+После этого у пользователя станет доступен раздел администрирования.
 
-## API
+## Статус проекта
 
-Сейчас FastAPI используется как служебный HTTP-интерфейс. Доступный маршрут:
-
-- `GET /health` - проверка состояния API, PostgreSQL и Redis
-
-Пример ответа:
-
-```json
-{
-  "status": "ok",
-  "database": "ok",
-  "redis": "ok"
-}
-```
-
-## Полезные команды
-
-Из файла [TERMINAL_COMMANDS.txt](TERMINAL_COMMANDS.txt):
-
-```powershell
-python -m app.bot.main
-python -m pytest -q
-python -m alembic upgrade head
-```
-
-## Что стоит помнить
-
-- напоминания и сводки завязаны на локальное время пользователя, которое бот определяет по введённому времени
-- архивные привычки нельзя отмечать и для них нельзя включать напоминания
-- удаление привычек мягкое: администратор может восстановить их из админки
-- в проекте уже есть слой API, воркеры, миграции и тесты, поэтому его удобно развивать дальше без смены архитектуры
+`HabbitTrackerBot` — зрелый pet-project с уже собранным базовым продуктовым контуром: пользовательский сценарий, фоновые задачи, административный слой, миграции и тесты. Репозиторий подходит как для дальнейшего развития функционала, так и как showcase проекта с внятной архитектурой и рабочей инфраструктурой.
