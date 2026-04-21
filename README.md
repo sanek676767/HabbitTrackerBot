@@ -2,7 +2,11 @@
 
 # HabbitTrackerBot
 
+> «Меньше шума — больше прогресса»
+
 Telegram-бот для системного ведения привычек: с гибкими расписаниями, напоминаниями, целями, историей, прогрессом и административными инструментами. Проект собран как аккуратное многослойное приложение на `aiogram`, `FastAPI`, `SQLAlchemy`, `PostgreSQL`, `Redis` и `Celery`.
+
+**Навигация:** [Возможности](#возможности) • [Стек](#стек) • [Архитектура](#архитектура) • [Запуск локально](#запуск-локально) • [Тесты](#тесты) • [Первый администратор](#первый-администратор) • [Статус проекта](#статус-проекта)
 
 ## Возможности
 
@@ -31,6 +35,8 @@ Telegram-бот для системного ведения привычек: с 
 ## Архитектура
 
 Проект собран по простой прикладной схеме: `handlers -> services -> repositories`.
+
+Слои приложения:
 
 - `handlers` принимают команды и callback-и Telegram, валидируют пользовательский сценарий и передают управление дальше
 - `services` содержат бизнес-логику: привычки, цели, прогресс, напоминания, админские действия, feedback и рассылка
@@ -66,6 +72,8 @@ tests/           тесты сервисов, handlers и middleware
 ```bash
 docker compose up --build
 ```
+
+Что будет поднято:
 
 Будут подняты `postgres`, `redis`, `migrator`, `api`, `bot`, `worker` и `beat`.
 
@@ -128,6 +136,8 @@ docker compose up -d postgres redis
 .\.venv\Scripts\celery.exe -A app.workers.celery_app:celery_app beat --loglevel=INFO
 ```
 
+Упрощённый локальный режим:
+
 Для упрощённой локальной разработки можно отключить Redis и Celery:
 
 ```env
@@ -150,7 +160,7 @@ REDIS_ENABLED=false
 
 Первый администратор назначается напрямую через базу данных. Перед этим пользователь должен хотя бы один раз открыть бота через `/start`, чтобы появилась запись в таблице `users`.
 
-SQL:
+SQL-запрос:
 
 ```sql
 UPDATE users
@@ -158,7 +168,7 @@ SET is_admin = true
 WHERE telegram_id = 123456789;
 ```
 
-Пример для Docker Compose:
+Команда для Docker Compose:
 
 ```bash
 docker compose exec postgres psql -U habit_user -d habit_tracker -c "UPDATE users SET is_admin = true WHERE telegram_id = 123456789;"
