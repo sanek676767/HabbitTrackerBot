@@ -1,3 +1,5 @@
+![HabbitTrackerBot banner](./app/bot/assets/readme_banner.png)
+
 # HabbitTrackerBot
 
 Telegram-бот для системного ведения привычек: с гибкими расписаниями, напоминаниями, целями, историей, прогрессом и административными инструментами. Проект собран как аккуратное многослойное приложение на `aiogram`, `FastAPI`, `SQLAlchemy`, `PostgreSQL`, `Redis` и `Celery`.
