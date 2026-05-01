@@ -8,3 +8,9 @@ __pycache__
 .ruff_cache
 dist
 build
+celerybeat-schedule
+*.log
+*.sqlite3
+*.db
+db.sqlite3
+media/

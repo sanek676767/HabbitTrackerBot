@@ -13,5 +13,10 @@ __pycache__/
 dist/
 build/
 *.log
+celerybeat-schedule
+*.sqlite3
+*.db
+db.sqlite3
+media/
 TERMINAL_COMMANDS.txt
 TERMINAL_COMMANDS.txt

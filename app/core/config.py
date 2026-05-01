@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     def database_url(self) -> str:
         """Асинхронный URL SQLAlchemy для работающего приложения."""
 
+        # This URL includes a password because SQLAlchemy needs it to connect.
+        # Do not log or expose the rendered value.
         return URL.create(
             drivername="postgresql+asyncpg",
             username=self.postgres_user,
@@ -58,6 +60,8 @@ class Settings(BaseSettings):
     def alembic_database_url(self) -> str:
         """URL для Alembic-миграций, совместимый с синхронным драйвером."""
 
+        # This URL includes a password because Alembic needs it to connect.
+        # Do not log or expose the rendered value.
         return URL.create(
             drivername="postgresql+psycopg",
             username=self.postgres_user,
