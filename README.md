@@ -1,12 +1,14 @@
-![HabbitTrackerBot banner](./app/bot/assets/readme_banner.png)
+![HabitTrackerBot banner](./app/bot/assets/readme_banner.png)
 
-# HabbitTrackerBot
+# HabitTrackerBot
 
 > «Меньше шума — больше прогресса»
 
-Telegram-бот для системного ведения привычек: с гибкими расписаниями, напоминаниями, целями, историей, прогрессом и административными инструментами. Проект собран как аккуратное многослойное приложение на `aiogram`, `FastAPI`, `SQLAlchemy`, `PostgreSQL`, `Redis` и `Celery`.
+HabitTrackerBot — Telegram-бот для людей, которые хотят вести привычки без лишнего шума: планировать расписание, получать напоминания, отмечать прогресс и видеть историю выполнения. Технически это production-style portfolio project, а не учебная заготовка: проект собран как многослойное асинхронное приложение на `aiogram`, `FastAPI`, `SQLAlchemy`, `PostgreSQL`, `Redis` и `Celery`.
 
-**Навигация:** [Возможности](#возможности) • [Стек](#стек) • [Архитектура](#архитектура) • [Скриншоты](#скриншоты) • [Запуск локально](#запуск-локально) • [Тесты](#тесты) • [Первый администратор](#первый-администратор) • [Статус проекта](#статус-проекта)
+> Note: the current local project folder may still be named `HabbitTrackerBot`. This README uses the intended public display name: `HabitTrackerBot`.
+
+**Навигация:** [Возможности](#возможности) • [For reviewers](#for-reviewers) • [Technical highlights](#technical-highlights) • [Стек](#стек) • [Архитектура](#архитектура) • [Скриншоты](#скриншоты) • [Environment variables](#environment-variables) • [Database & migrations](#database--migrations) • [Запуск локально](#запуск-локально) • [Тесты](#тесты) • [Admin setup](#admin-setup) • [Security / Publishing checklist](#security--publishing-checklist) • [Статус проекта](#статус-проекта) • [Roadmap](#roadmap)
 
 ## Возможности
 
@@ -18,6 +20,25 @@ Telegram-бот для системного ведения привычек: с 
 - Пауза и мягкое удаление привычек с возможностью восстановления
 - Обратная связь от пользователей
 - Админ-панель: поиск пользователей, блокировка, выдача прав, ответы на обращения, action log, рассылка
+
+## For reviewers
+
+- Layered architecture: handlers, services, repositories, models.
+- Async Telegram bot on aiogram 3.
+- PostgreSQL persistence with SQLAlchemy and Alembic migrations.
+- Redis + Celery for scheduled reminders and summaries.
+- FastAPI healthcheck for infrastructure monitoring.
+- Docker Compose setup for local infrastructure.
+- Pytest-based test suite for core project logic.
+
+## Technical highlights
+
+- **Bot flow:** Telegram commands and callbacks are handled through aiogram routers, middlewares and keyboards inside `app/bot`.
+- **Database layer:** SQLAlchemy models describe users, habits, logs, plans, subscriptions, feedback and admin action logs; repositories isolate database access from business logic.
+- **Background tasks:** Redis and Celery are used for scheduled reminders and progress summaries; a simplified local mode can run without Redis/Celery.
+- **Healthcheck:** FastAPI provides a lightweight HTTP layer with `GET /health` for infrastructure checks.
+- **Tests:** pytest-based tests cover services, bot handlers, navigation text and middleware behavior.
+- **Security / publishing preparation:** `.env` is excluded from Git, `.env.example` is used as a template, and local runtime artifacts are ignored.
 
 ## Стек
 
@@ -79,23 +100,62 @@ tests/           тесты сервисов, handlers и middleware
 ### Админка
 ![Админка](assets/screenshots/admin.png)
 
+## Environment variables
+
+Шаблон переменных окружения лежит в [`.env.example`](./.env.example). Реальные значения должны храниться только в локальном `.env` и не должны попадать в Git.
+
+| Variable | Required | Description |
+|---|---|---|
+| `APP_NAME` | No | Application name used by the API/app settings |
+| `ENVIRONMENT` | No | Runtime environment name |
+| `LOG_LEVEL` | No | Logging level |
+| `BOT_TOKEN` | Yes | Telegram bot token |
+| `FEEDBACK_CONTACT_USERNAME` | No | Contact username for feedback flow |
+| `POSTGRES_HOST` | Yes | PostgreSQL host |
+| `POSTGRES_PORT` | Yes | PostgreSQL port |
+| `POSTGRES_DB` | Yes | PostgreSQL database name |
+| `POSTGRES_USER` | Yes | PostgreSQL username |
+| `POSTGRES_PASSWORD` | Yes | PostgreSQL password |
+| `DATABASE_ECHO` | No | SQLAlchemy query logging flag |
+| `REDIS_HOST` | No | Redis host |
+| `REDIS_PORT` | No | Redis port |
+| `REDIS_DB` | No | Redis database index for app runtime |
+| `REDIS_ENABLED` | No | Enables Redis/Celery-backed background processing |
+| `CELERY_BROKER_DB` | No | Redis database index for Celery broker |
+| `CELERY_RESULT_DB` | No | Redis database index for Celery results |
+| `API_HOST` | No | FastAPI host |
+| `API_PORT` | No | FastAPI port |
+
+## Database & migrations
+
+HabitTrackerBot uses PostgreSQL as the main database. Domain entities are described as SQLAlchemy models in `app/models`, and schema changes are managed through Alembic migrations in `migrations/versions`.
+
+Before running the bot or API against a fresh database, apply migrations:
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic upgrade head
+```
+
+The real database URL is loaded from environment variables through the application settings. `alembic.ini` contains only a safe placeholder for publishing.
+
 ## Запуск локально
+
+Recommended local setup: Docker Compose.
 
 Шаблон переменных окружения лежит в [`.env.example`](./.env.example).
 
 ### Вариант 1. Через Docker Compose
 
-1. Скопируйте `.env.example` в `.env`
-2. Заполните `BOT_TOKEN`
-3. Запустите проект:
+1. Склонируйте репозиторий и перейдите в папку проекта
+2. Скопируйте `.env.example` в `.env`
+3. Заполните обязательные переменные, минимум `BOT_TOKEN`
+4. Запустите проект:
 
 ```bash
 docker compose up --build
 ```
 
-Что будет поднято:
-
-Будут подняты `postgres`, `redis`, `migrator`, `api`, `bot`, `worker` и `beat`.
+Docker Compose поднимает `postgres`, `redis`, `migrator`, `api`, `bot`, `worker` и `beat`. Миграции применяются через сервис `migrator`.
 
 После запуска:
 
@@ -176,9 +236,9 @@ REDIS_ENABLED=false
 
 Тесты лежат в каталоге [`tests`](./tests) и покрывают сервисы, обработчики и middleware.
 
-## Первый администратор
+## Admin setup
 
-Первый администратор назначается напрямую через базу данных. Перед этим пользователь должен хотя бы один раз открыть бота через `/start`, чтобы появилась запись в таблице `users`.
+Административный доступ назначается через базу данных. Перед этим пользователь должен хотя бы один раз открыть бота через `/start`, чтобы появилась запись в таблице `users`.
 
 SQL-запрос:
 
@@ -207,4 +267,14 @@ docker compose exec postgres psql -U habit_user -d habit_tracker -c "UPDATE user
 
 ## Статус проекта
 
-`HabbitTrackerBot` — зрелый pet-project с уже собранным базовым продуктовым контуром: пользовательский сценарий, фоновые задачи, административный слой, миграции и тесты. Репозиторий подходит как для дальнейшего развития функционала, так и как showcase проекта с внятной архитектурой и рабочей инфраструктурой.
+HabitTrackerBot is a portfolio-ready Telegram bot project with a production-style architecture. В проекте уже собран базовый продуктовый контур: пользовательские сценарии, фоновые задачи, административный слой, миграции, тесты и локальная инфраструктура. Репозиторий подходит как для дальнейшего развития функционала, так и как showcase проекта с понятной архитектурой.
+
+## Roadmap
+
+- GitHub Actions CI
+- Deployment notes
+- Improved admin analytics
+- Reminder reliability improvements
+- Demo video/GIF
+- Test coverage expansion
+- Public portfolio case study
